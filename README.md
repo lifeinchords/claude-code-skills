@@ -20,6 +20,8 @@ flowchart BT
 
 This skill operates on **two repos**: your project and your template. Claude will `cd` between them during execution, so both must be cloned locally in accessible paths. You'll also need push access to the template (or use a PR workflow).
 
+Whether your project was created via `git clone`, GitHub fork, or template - the cherry-pick mechanics are identical. The key requirement is push access to the template repo.
+
 ## Dependencies
 
 - [gh](https://cli.github.com/) - GitHub CLI for repo verification and commit preview
