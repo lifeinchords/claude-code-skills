@@ -1,0 +1,14 @@
+.docs
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.vscode/
+.idea/
+
+# Temporary files
+temp/
+*.tmp
+*.bak
