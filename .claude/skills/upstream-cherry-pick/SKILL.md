@@ -252,10 +252,17 @@ git stash pop
 ```bash
 cd <project-repo>
 
-# If using upstream remote, ensure push is disabled
-# This prevents accidental pushes to template
+# Check if upstream remote exists
+git remote -v | grep upstream
+```
+
+If upstream remote exists, disable push to prevent accidental commits to template:
+
+```bash
 git remote set-url --push upstream DISABLED
 ```
+
+If no upstream remote (standalone repo), skip this step.
 
 
 ## Identifying Generic Commits
