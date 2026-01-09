@@ -1,13 +1,28 @@
 ---
 name: upstream-cherry-pick
-description: A safe, guided process for bringing reusable agentic improvements from a project repo (ie, agents, skills, scripts, docs) to its upstream shared template
+description: >
+  Cherry-pick agentic dev improvements from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: READY (generic), REFINABLE (useful but has hardcoded paths/names—offer to generalize), or SKIP (project-specific). READY examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/agentic-processes/, CLAUDE.md, prompt templates. NOT FOR: feature code, business logic, PRDs, project configs, env files. For REFINABLE commits: pause cherry-pick, generalize the code, prepare commit, get approval, then resume  
+user-invocable: yes
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash(git status:*)
+  - Bash(git log:*)
+  - Bash(git diff:*)
+  - Bash(git show:*)
+  - Bash(git branch --list:*)
+  - Bash(git branch --show-current:*)
+  - Bash(git remote -v:*)
+  - Bash(git rev-parse:*)
+  - Bash(git ls-files:*)
 ---
 
 ## Purpose
 
-Many teams maintain a template repository that gets cloned or
+Situations where a template repository that gets cloned or
 forked to start new projects. Over time, project repos accumulate improvements
-that should flow back to the template for other projects to inherit.
+that could flow back to the template for other projects to inherit.
 
 This skill guides Claude through safely cherry-picking commits from a project
 repo to the upstream template repo.
@@ -18,6 +33,34 @@ repo to the upstream template repo.
 - `jq` - JSON processor for parsing API responses
 
 
+## Scripts
+
+This skill includes executable scripts in `scripts/` that handle deterministic operations:
+
+**preflight-check.sh** - Validates template repo state before cherry-picking
+```bash
+./scripts/preflight-check.sh <template-repo-path>
+# Returns JSON with status: clean, dirty, wrong_branch, or behind
+# Exit codes: 0=clean, 1=uncommitted changes, 2=wrong branch, 3=behind remote, 4=invalid path
+```
+
+**classify-commits.sh** - Analyzes commits and classifies as generic vs project-specific
+```bash
+./scripts/classify-commits.sh <remote/branch> [count]
+# Returns JSON array with classification for each commit
+# Classifications: generic, project_specific, needs_review
+```
+
+**conflict-backup.sh** - Detects conflicts, creates backups, outputs structured analysis
+```bash
+./scripts/conflict-backup.sh [commit-sha] [commit-message]
+# Returns JSON with conflict details: files, line numbers, types, backup location
+# Exit codes: 0=conflicts backed up, 1=no conflicts, 2=not a repo, 3=backup failed
+```
+
+Claude interprets script output and handles edge cases requiring judgment.
+
+
 ## Invocation
 
 When this skill is triggered, confirm operator understands the setup:
@@ -25,8 +68,8 @@ When this skill is triggered, confirm operator understands the setup:
 ```
 This skill operates on TWO directories:
 
-1. Your project repo (where you are now)
-2. Your template repo (where cherry-picks will be applied)
+1. project repo (where you are now)
+2. template repo (where cherry-picks will be applied)
 
 Both must be cloned locally. You'll need push access to the template.
 
@@ -43,37 +86,94 @@ How many recent commits to scan? [default: 10]:
 
 Use this value for the git log command in Step 2.
 
-
 ## Prerequisites
 
-A: Upstream template repo exists locally (e.g., ~/Code/template)
+Before starting, verify:
 
-B: Project repo was originally cloned/forked from the template
+**A: Dependencies installed**
 
-C: Commits follow a convention distinguishing generic vs project-specific:
-   (1) Generic: process docs, agents, skills, scripts usable in any project
-   (2) Project-specific: configs, feature code, project names, PRDs
+Run the dependency check script:
+```bash
+./scripts/check-deps.sh
+```
 
+The script checks the environment and verifies:
+- Operating system is macOS (this skill currently only supports macOS)
+- Required dependencies (gh, jq) are installed
+
+If dependencies are missing, the script will:
+1. Report which deps are missing (gh, jq)
+2. Prompt for approval to install via `brew install`
+3. Install if approved, or exit if declined
+
+If the OS is not macOS, the script will exit with an error indicating this skill currently only supports macOS.
+
+**B: Upstream template repo exists locally** (e.g., ~/Code/template)
+
+**C: Project repo was originally cloned/forked from the template**
+
+
+## Classification Guidance
+
+Read **EXAMPLES.md** for detailed classification patterns with explanations.
+
+Don't rely strictly on commit message prefixes like `[process]`. Use judgment based on:
+
+- File paths (`.claude/`, `.cursor/`, `docs/agentic-processes/`, `tools/prompt-classification-scripts/`)
+- Content type (agents, skills, hooks, MCP configs, rules)
+- Portability (would this work in another project without modification?)
+
+**High likelihood** - offer to cherry-pick:
+- Agent definitions (`.claude/agents/`)
+- Skills (`.claude/skills/`)
+- Hooks (`.claude/hooks/`)
+- MCP server configs (`.mcp.json`, `.cursor/mcp.json`)
+- Cursor rules (`.cursor/rules/*.mdc`)
+- Process documentation (`docs/agentic-processes/`)
+- Bash workflow scripts (`tools/`, `scripts/`)
+- CLAUDE.md rule updates
+- Reusable automation harnesses
+- Prompts
+
+**Skip without asking** - these don't match our goals:
+- Feature code in `src/`, `app/`, `pages/`
+- PRDs, project-specific docs
+- Environment files
+- IDE editor preferences (`.vscode/settings.json`, `.cursor/settings.json`)
+
+**Inspect the diff** - these require judgment:
+- `package.json`: SKIP if changing project name/version, but READY/REFINABLE if adding agentic packages like `@anthropic-ai/claude-code`, `@modelcontextprotocol/*`, or MCP-related deps
+- Mixed commits: If a commit touches both generic and project-specific files, check if they can be separated and but in the refinable bucket
+
+When uncertain, ask the operator.
 
 ## Pre-Flight Checks
 
-Before cherry-picking, always verify clean state in the template repo:
+Run the preflight script to validate template repo state:
 
 ```bash
-# Navigate to template repo
-cd <template-repo>
-
-# Check for uncommitted changes that could conflict
-git status
-
-# If changes exist, stash them with descriptive message
-# Format: pre-cherry-pick-YYYY-MM-DD-HHMM
-git stash push -u -m "pre-cherry-pick-$(date +%Y-%m-%d-%H%M)"
-
-# Ensure on correct branch and up to date
-git checkout <default-branch>
-git pull origin <default-branch>
+./scripts/preflight-check.sh <template-repo-path>
 ```
+
+Handle based on exit code:
+
+- **Exit 0 (clean)**: Proceed to Cherry-Pick Procedure
+- **Exit 1 (uncommitted changes)**: Stash changes first:
+  ```bash
+  cd <template-repo>
+  git stash push -u -m "pre-cherry-pick-$(date +%Y-%m-%d-%H%M)"
+  ```
+- **Exit 2 (wrong branch)**: Switch to default branch:
+  ```bash
+  cd <template-repo>
+  git checkout <default-branch>
+  ```
+- **Exit 3 (behind remote)**: Pull latest:
+  ```bash
+  cd <template-repo>
+  git pull origin <default-branch>
+  ```
+- **Exit 4 (invalid path)**: Verify template repo path with operator
 
 
 ## Cherry-Pick Procedure
@@ -95,21 +195,27 @@ git fetch tmp-project
 
 ### Step 2: Identify generic commits
 
-Scan the last N commits (from invocation input) to classify:
+Run the classification script to analyze commits:
 
 ```bash
-# List last N commits with files changed for classification
-# Replace <N> with value from invocation (default: 10)
-git log tmp-project/<branch> --oneline -<N> --stat | head -60
+./scripts/classify-commits.sh tmp-project/<branch> <N>
+```
 
-# View specific commit details when unsure
+The script returns JSON with each commit classified as:
+- **generic**: Cherry-pickable (agents, skills, process docs, tools)
+- **needs_review**: Claude uses judgment based on file contents
+- **project_specific**: Skip (feature code, configs, PRDs)
+
+For commits marked `needs_review`, inspect manually and determine if they are:
+- **refinable**: Contains useful tooling but has hardcoded project-specific elements (paths, URLs, project names). Offer to pause cherry-picking, generalize the code, then resume.
+- **maybe**: Needs operator judgment on tool/workflow assumptions
+- **skip**: Fundamentally project-specific, no modification helps
+
+```bash
 git show --stat --oneline <sha>
 ```
 
-Classify each commit:
-
-- GENERIC: agents, skills, scripts, docs/process/, template rules
-- PROJECT-SPECIFIC: project name references, configs, feature code, PRDs
+Apply judgment: Does this commit contain reusable process improvements or project-specific code?
 
 ### Step 3: Operator review (REQUIRED)
 
@@ -126,6 +232,14 @@ GENERIC COMMITS TO CHERRY-PICK (oldest first):
 | <sha2>  | <message>                      |
 |         | -> <file1>                     |
 
+REFINABLE (useful but needs generalization):
+
+| SHA     | Message                        | Blocker                    |
+|---------|--------------------------------|----------------------------|
+| <sha1>  | <message>                      | Hardcoded path: /Users/... |
+|         | -> <file1>                     |                            |
+|         | Offer: Replace with $PROJECT_ROOT or relative path          |
+
 EXCLUDED (project-specific):
 
 | SHA     | Message                        | Reason        |
@@ -137,9 +251,22 @@ EXCLUDED (project-specific):
 |         | -> <file1>                     |               |
 
 Proceed with cherry-pick? [y/n]
+For REFINABLE commits: Want me to pause and generalize them first?
 ```
 
 Do NOT proceed until operator confirms the commit list is correct.
+
+### Handling REFINABLE commits
+
+If operator wants to refine a commit before cherry-picking:
+
+1. **Pause cherry-pick process** - Note where you stopped
+2. **Switch to project repo** - `cd <project-repo>`
+3. **Create generalized version** - Take necessary action, ie. replace hardcoded paths/names with variables or placeholders
+4. **Prepare commit** - Stage changes and draft commit message
+5. **Stop for approval** - Present the diff and proposed commit message to operator
+6. **After approval** - Commit the refined version
+7. **Resume cherry-pick** - Return to template repo and continue from where you paused
 
 ### Step 4: Cherry-pick commits
 
@@ -158,37 +285,22 @@ git cherry-pick <start-sha>^..<end-sha>
 
 If cherry-pick reports conflicts, STOP immediately.
 
-```bash
-# Check which files have conflicts
-git status
+Run the conflict backup script to detect, backup, and analyze conflicts:
 
-# List only the conflicted file paths
-git diff --name-only --diff-filter=U
+```bash
+./scripts/conflict-backup.sh <commit-sha> "<commit-message>"
 ```
 
-Create backup before operator resolves:
+The script returns JSON with:
+- All conflicted files with line numbers
+- Conflict type per file (ADDITION, MODIFICATION, DELETION)
+- Backup location (temp/merge-backups/YYYY-MM-DD/)
+- Backup success status per file
 
+If exit code is 1 (no conflicts), proceed to Step 6.
+
+For additional context, show the full diff:
 ```bash
-# Create dated backup directory
-mkdir -p temp/merge-backups/$(date +%Y-%m-%d)
-
-# Copy all conflicted files to backup location
-for f in $(git diff --name-only --diff-filter=U); do
-  mkdir -p "temp/merge-backups/$(date +%Y-%m-%d)/$(dirname $f)"
-  cp "$f" "temp/merge-backups/$(date +%Y-%m-%d)/$f"
-done
-```
-
-Analyze conflicts and present summary to operator:
-
-```bash
-# Show line numbers where conflicts occur in each file
-for f in $(git diff --name-only --diff-filter=U); do
-  echo "=== $f ==="
-  grep -n "<<<<<<< HEAD" "$f" | head -5
-done
-
-# Show full diff of conflicted sections
 git diff --diff-filter=U
 ```
 
@@ -280,43 +392,15 @@ git remote set-url --push upstream DISABLED
 If no upstream remote (standalone repo), skip this step.
 
 
-## Identifying Generic Commits
+## Commit Message Convention (Optional Signal)
 
-Commits are generic if they:
+These prefixes are helpful signals but NOT required for classification:
 
-A: Modify files in .claude/agents/ (not project-specific configs)
+- `[process]` - suggests generic/shareable content
+- `[<project-name>]` - suggests project-specific content
 
-B: Add skills to .claude/skills/ that are reusable
-
-C: Update docs/process reference materials
-
-D: Change template rules applicable to any project
-
-E: Add scripts in tools/ that are project-agnostic
-
-Commits are project-specific if they:
-
-A: Reference project name in code or configs
-
-B: Modify project-specific configs (package.json name, workspace file)
-
-C: Add project-specific PRDs or feature docs
-
-
-## Commit Message Convention
-
-When making commits intended for upstream:
-
-```
-[process] Add <description>
-```
-
-When making project-specific commits:
-
-```
-[<project-name>] Add <description>
-```
-
+Claude should use file paths and content analysis as primary classification method.
+Commit messages are secondary signals that may or may not be present.
 
 ## Rigor
 
@@ -325,19 +409,13 @@ When making project-specific commits:
 When `required`:
 
 A: Always stash uncommitted changes in template first
-
 B: Always create backup for conflicts in temp/merge-backups/
-
 C: Always verify remote cleanup after cherry-pick
-
 D: Never force push to template
-
 E: Never auto-resolve merge conflicts - stop for operator
 
 When `exploratory`:
-
 A: Can skip backup creation for simple cherry-picks
-
 
 ## Checklist
 
