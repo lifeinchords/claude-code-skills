@@ -24,6 +24,31 @@ flowchart BT
 - [jq](https://jqlang.github.io/jq/) - JSON processor for parsing API responses
 
 
+## Prerequisites
+
+**Important:** This skill works differently from typical Claude Code workflows.
+
+Claude Code usually runs isolated in a single project directory. This skill requires Claude to **jump between two directories**:
+
+1. Your **project repo** (where you run Claude and have commits to cherry-pick)
+2. Your **template repo** (where commits get applied)
+
+```
+~/dev-projects/
+├── shared-template/    ← Claude needs access here (to apply cherry-picks)
+├── orion-project/      ← You run Claude here
+└── mars-project/
+```
+
+**Before using this skill, ensure:**
+
+- Both repos are cloned locally in accessible paths
+- You have **push access** to the template repo (or use the PR workflow)
+- The template path is reachable from your project directory
+
+If you only have the project repo cloned, the skill will fail when it tries to `cd` to the template.
+
+
 ## Example Flow
 
 The great thing about Claude skills is that [the source itself](.claude/skills/upstream-cherry-pick/SKILL.md#invocation) is natural language.
