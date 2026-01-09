@@ -20,7 +20,22 @@ repo to the upstream template repo.
 
 ## Invocation
 
-When this skill is triggered, prompt operator for commit scan depth:
+When this skill is triggered, confirm operator understands the setup:
+
+```
+This skill operates on TWO directories:
+
+1. Your project repo (where you are now)
+2. Your template repo (where cherry-picks will be applied)
+
+Both must be cloned locally. You'll need push access to the template.
+
+Template repo path [e.g. ~/dev-projects/shared-template]:
+```
+
+Store the template path for use in Pre-Flight Checks.
+
+Then prompt for commit scan depth:
 
 ```
 How many recent commits to scan? [default: 10]:
