@@ -26,7 +26,7 @@ flowchart BT
 
 ## Example Flow
 
-The great thing about Claude skills is that [the source itself](skills/upstream-cherry-pick/SKILL.md#invocation) is natural language.
+The great thing about Claude skills is that [the source itself](.claude/skills/upstream-cherry-pick/SKILL.md#invocation) is natural language.
 Here's an example of how to use the Skill in the broader context of a sprint:
 
 ```bash
@@ -42,7 +42,7 @@ ls
 git clone git@github.com:lifeinchords/claude-code-skills
 
 # bring this repo's cherry-pick skill to your upstream shared template
-cp -r claude-code-skills/skills/upstream-cherry-pick shared-template/.claude/skills/
+cp -r claude-code-skills/.claude/skills/upstream-cherry-pick shared-template/.claude/skills/
 git commit -am "[Skill] Adding a guided cherry-picking process"
 git push upstream
 
@@ -98,7 +98,7 @@ I've done a bunch of work in this repo recently. I'd like to cherry-pick anythin
 Let's consider only the last 6 commits
 ```
 
-This skill defaults to the last 10 commits. You can change [this default](skills/upstream-cherry-pick/SKILL.md#invocation) in the skill, and decide at runtime. Claude will adapt accordingly:
+This skill defaults to the last 10 commits. You can change [this default](.claude/skills/upstream-cherry-pick/SKILL.md#invocation) in the skill, and decide at runtime. Claude will adapt accordingly:
 
 ```bash
 > Ok great! I'll only check the last 6
