@@ -1,7 +1,7 @@
 ---
 name: upstream-cherry-pick
 description: >
-  Cherry-pick agentic dev improvements from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: READY (generic), REFINABLE (useful but has hardcoded paths/names—offer to generalize), or SKIP (project-specific). READY examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/agentic-processes/, CLAUDE.md, prompt templates. NOT FOR: feature code, business logic, PRDs, project configs, env files. For REFINABLE commits: pause cherry-pick, generalize the code, prepare commit, get approval, then resume  
+  Cherry-pick agentic patterns from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: YES (portable), MAYBE (needs changes/judgment—offer to fix), or NO (project-specific). YES examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/process/, CLAUDE.md, workflow scripts. NOT FOR: feature code, business logic, PRDs, project configs, env files. For MAYBE commits: present with "Offer:" describing what needs fixing
 user-invocable: yes
 allowed-tools:
   - Read
@@ -29,9 +29,12 @@ repo to the upstream template repo.
 
 ## Dependencies
 
+This skill requires:
 - `gh` - GitHub CLI for repo verification and commit preview
-- `jq` - JSON processor for parsing API responses
-
+- `jq` - JSON processor for parsing script outputs
+- `git` - Version control system for cherry-picking operations
+- `bash` - Shell for running scripts (currently supports bash; future: fish, zsh)
+- `brew` - macOS package manager for installing dependencies
 
 ## Scripts
 
@@ -73,7 +76,7 @@ This skill operates on TWO directories:
 
 Both must be cloned locally. You'll need push access to the template.
 
-Template repo path [e.g. ~/dev-projects/shared-template]:
+Template repo path [e.g. ~/dev-projects/shared-agentic-template]:
 ```
 
 Store the template path for use in Pre-Flight Checks.
@@ -88,64 +91,47 @@ Use this value for the git log command in Step 2.
 
 ## Prerequisites
 
-Before starting, verify:
+A: **Dependencies**: `git`, `gh` (GitHub CLI), and `jq` must be installed. Run `./scripts/check-deps.sh` to verify and install if needed. Currently macOS only.
 
-**A: Dependencies installed**
+B: **Upstream template repo** exists locally (e.g., ~/dev-projects/shared-agentic-template)
 
-Run the dependency check script:
-```bash
-./scripts/check-deps.sh
-```
-
-The script checks the environment and verifies:
-- Operating system is macOS (this skill currently only supports macOS)
-- Required dependencies (gh, jq) are installed
-
-If dependencies are missing, the script will:
-1. Report which deps are missing (gh, jq)
-2. Prompt for approval to install via `brew install`
-3. Install if approved, or exit if declined
-
-If the OS is not macOS, the script will exit with an error indicating this skill currently only supports macOS.
-
-**B: Upstream template repo exists locally** (e.g., ~/Code/template)
-
-**C: Project repo was originally cloned/forked from the template**
+C: **Project repo** was originally cloned/forked from the template
 
 
 ## Classification Guidance
 
 Read **EXAMPLES.md** for detailed classification patterns with explanations.
 
-Don't rely strictly on commit message prefixes like `[process]`. Use judgment based on:
+Classify commits into three buckets: **YES**, **MAYBE**, or **NO**.
 
-- File paths (`.claude/`, `.cursor/`, `docs/agentic-processes/`, `tools/prompt-classification-scripts/`)
+Don't rely strictly on commit message prefixes like `[process]`. Use judgment based on:
+- File paths (`.claude/`, `.cursor/`, `docs/process/`, `tools/`)
 - Content type (agents, skills, hooks, MCP configs, rules)
 - Portability (would this work in another project without modification?)
 
-**High likelihood** - offer to cherry-pick:
-- Agent definitions (`.claude/agents/`)
-- Skills (`.claude/skills/`)
-- Hooks (`.claude/hooks/`)
-- MCP server configs (`.mcp.json`, `.cursor/mcp.json`)
+**YES** (cherry-pick as-is):
+- Agent definitions, skills, hooks (`.claude/`)
+- MCP configs (`.mcp.json`, `.cursor/mcp.json`)
 - Cursor rules (`.cursor/rules/*.mdc`)
-- Process documentation (`docs/agentic-processes/`)
-- Bash workflow scripts (`tools/`, `scripts/`)
+- Agentic process configs (`agent-vm-setup/compose.yml`)
+- Agentic process docs (`docs/process/agentic-setup.md`)
+- Agentic workflow scripts (`scripts/mcp-setup.sh`, `tools/analyze-transcripts.sh`, `.claude/hooks/`)
 - CLAUDE.md rule updates
-- Reusable automation harnesses
-- Prompts
+- Prompts for agentic workflows
 
-**Skip without asking** - these don't match our goals:
-- Feature code in `src/`, `app/`, `pages/`
+**NO** (project-specific - skip):
+- Feature code (`src/`, `app/`, `pages/`)
 - PRDs, project-specific docs
 - Environment files
-- IDE editor preferences (`.vscode/settings.json`, `.cursor/settings.json`)
+- IDE settings (`.vscode/settings.json`)
 
-**Inspect the diff** - these require judgment:
-- `package.json`: SKIP if changing project name/version, but READY/REFINABLE if adding agentic packages like `@anthropic-ai/claude-code`, `@modelcontextprotocol/*`, or MCP-related deps
-- Mixed commits: If a commit touches both generic and project-specific files, check if they can be separated and but in the refinable bucket
+**MAYBE** (needs changes or judgment):
+- Scripts with hardcoded paths → Offer to parameterize
+- Hooks that assume specific tools (biome, eslint) → Ask if template uses them
+- `package.json` changes → Inspect diff: agentic packages = YES, project name = NO
+- Mixed commits → Can they be split or generalized?
 
-When uncertain, ask the operator.
+When uncertain, classify as MAYBE and present with an "Offer:" explaining what needs fixing or deciding.
 
 ## Pre-Flight Checks
 
@@ -219,54 +205,55 @@ Apply judgment: Does this commit contain reusable process improvements or projec
 
 ### Step 3: Operator review (REQUIRED)
 
-Present identified commits to operator for approval:
+Present identified commits to operator for approval using the YES/MAYBE/NO format:
 
 ```
-GENERIC COMMITS TO CHERRY-PICK (oldest first):
+CHERRY PICK RECOMMENDATION (oldest first):
 
-| SHA     | Message                        |
-|---------|--------------------------------|
-| <sha1>  | <message>                      |
-|         | -> <file1>                     |
-|         | -> <file2>                     |
-| <sha2>  | <message>                      |
-|         | -> <file1>                     |
+YES (cherry-pick as-is):
+| SHA     | Message                                             |
+|---------|-----------------------------------------------------|
+| <sha1>  | <message>                                           |
+|         | -> <file1>                                          |
+|         | -> <file2>                                          |
+| <sha2>  | <message>                                           |
+|         | -> <file1>                                          |
 
-REFINABLE (useful but needs generalization):
+MAYBE (needs changes or judgment):
+| SHA     | Message                                | Offer                    |
+|---------|----------------------------------------|--------------------------|
+| <sha1>  | <message>                              | <what needs fixing>      |
+|         | -> <file1>                             | <action to take>         |
+| <sha2>  | <message>                              | <judgment question>      |
+|         | -> <file1>                             |                          |
 
-| SHA     | Message                        | Blocker                    |
-|---------|--------------------------------|----------------------------|
-| <sha1>  | <message>                      | Hardcoded path: /Users/... |
-|         | -> <file1>                     |                            |
-|         | Offer: Replace with $PROJECT_ROOT or relative path          |
+NO (project-specific):
+| SHA     | Message                        | Reason              |
+|---------|--------------------------------|---------------------|
+| <sha1>  | <message>                      | <reason>            |
+|         | -> <file1>                     |                     |
+|         | -> <file2>                     |                     |
+| <sha2>  | <message>                      | <reason>            |
+|         | -> <file1>                     |                     |
 
-EXCLUDED (project-specific):
-
-| SHA     | Message                        | Reason        |
-|---------|--------------------------------|---------------|
-| <sha1>  | <message>                      | <reason>      |
-|         | -> <file1>                     |               |
-|         | -> <file2>                     |               |
-| <sha2>  | <message>                      | <reason>      |
-|         | -> <file1>                     |               |
-
-Proceed with cherry-pick? [y/n]
-For REFINABLE commits: Want me to pause and generalize them first?
+Proceed? Operator can respond naturally:
+- "yes to all"
+- "for MAYBE <sha>, parameterize it first"
+- "skip the <description> or <sha>"
 ```
 
-Do NOT proceed until operator confirms the commit list is correct.
+Do NOT proceed until operator confirms which commits to cherry-pick.
 
-### Handling REFINABLE commits
+### Handling MAYBE commits
 
-If operator wants to refine a commit before cherry-picking:
+If operator asks to fix a MAYBE commit before cherry-picking:
 
-1. **Pause cherry-pick process** - Note where you stopped
-2. **Switch to project repo** - `cd <project-repo>`
-3. **Create generalized version** - Take necessary action, ie. replace hardcoded paths/names with variables or placeholders
-4. **Prepare commit** - Stage changes and draft commit message
-5. **Stop for approval** - Present the diff and proposed commit message to operator
-6. **After approval** - Commit the refined version
-7. **Resume cherry-pick** - Return to template repo and continue from where you paused
+1. **Pause the cherry-pick workflow**
+2. **Switch to project repo**: `cd <project-repo>`
+3. **Make the fix**: Parameterize paths, replace project names, etc.
+4. **Present diff and commit message** for operator approval
+5. **After approval**: Commit the fixed version
+6. **Resume cherry-picking**: Return to template repo and continue
 
 ### Step 4: Cherry-pick commits
 
@@ -374,7 +361,7 @@ git remote -v
 git stash pop
 ```
 
-### Step 7: Return to project
+### Step 7: Return to project and secure upstream
 
 ```bash
 cd <project-repo>
@@ -383,24 +370,85 @@ cd <project-repo>
 git remote -v | grep upstream
 ```
 
-If upstream remote exists, disable push to prevent accidental commits to template:
+If upstream remote exists, disable push to prevent accidentally pushing project code to template:
 
 ```bash
+# This sets the push URL to "DISABLED" while keeping fetch URL intact
+# Prevents: git push upstream (which would send project code to template)
+# Allows: git pull upstream main (to get future template updates)
 git remote set-url --push upstream DISABLED
 ```
 
-If no upstream remote (standalone repo), skip this step.
+**Why disable push?** The upstream remote points to your template repo. Disabling push prevents accidentally running `git push upstream` from your project, which would pollute the template with project-specific code. You can still fetch/pull template updates; only pushes are blocked.
+
+If no upstream remote exists (standalone repo), skip this step.
 
 
-## Commit Message Convention (Optional Signal)
+## Error Recovery
 
-These prefixes are helpful signals but NOT required for classification:
+### Interrupted Cherry-Pick
 
-- `[process]` - suggests generic/shareable content
-- `[<project-name>]` - suggests project-specific content
+If the cherry-pick process is interrupted (Ctrl+C, system crash, connection loss), check the state before resuming:
 
-Claude should use file paths and content analysis as primary classification method.
-Commit messages are secondary signals that may or may not be present.
+```bash
+cd <template-repo>
+
+# Check if cherry-pick is in progress
+git status
+```
+
+If you see "You are currently cherry-picking commit..." or "Unmerged paths", you have an in-progress cherry-pick:
+
+**Option A: Resume after fixing conflicts**
+```bash
+# After manually resolving conflicts:
+git add .
+git cherry-pick --continue
+```
+
+**Option B: Abort and restart**
+```bash
+# Abort the current cherry-pick
+git cherry-pick --abort
+
+# Clean up temporary remote
+git remote remove tmp-project 2>/dev/null || true
+
+# Return to clean state
+git reset --hard origin/<default-branch>
+```
+
+**Option C: Skip problematic commit**
+```bash
+# Skip this commit and continue with next one
+git cherry-pick --skip
+```
+
+After recovery, verify the template repo state:
+```bash
+git status
+git log --oneline -5
+```
+
+### Script Failures
+
+**preflight-check.sh failures**:
+- Exit code 1 (dirty): Stash or commit changes, then retry
+- Exit code 2 (wrong branch): Checkout default branch, then retry
+- Exit code 3 (behind/diverged): Pull latest changes, then retry
+- Exit code 4 (invalid path): Verify template path is correct
+
+**classify-commits.sh failures**:
+- "Invalid branch name": Check for typos in branch name or special characters
+- "Remote branch not found": Run `git fetch tmp-project` first
+- "Count exceeds 100": Reduce commit count to ≤100
+
+**check-deps.sh failures**:
+- "Missing git/gh/jq": Install the missing dependency manually or via brew
+- "Unsupported OS": Currently macOS only - manual install required for other OS
+- "brew not found": Install Homebrew first, then retry
+- "Failed to install <dep>": Check network connection and brew status
+
 
 ## Rigor
 

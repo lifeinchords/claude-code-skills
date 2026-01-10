@@ -22,7 +22,7 @@ COMMIT_MESSAGE="${2:-}"
 
 # Verify we're in a git repo
 if ! git rev-parse --git-dir &>/dev/null; then
-    echo '{"status": "error", "message": "Not a git repository", "exit_code": 2}'
+    jq -n '{"status": "error", "message": "Not a git repository", "exit_code": 2}'
     exit 2
 fi
 
@@ -30,7 +30,7 @@ fi
 CONFLICTED_FILES=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
 
 if [[ -z "$CONFLICTED_FILES" ]]; then
-    echo '{"status": "no_conflicts", "message": "No merge conflicts detected", "exit_code": 1}'
+    jq -n '{"status": "no_conflicts", "message": "No merge conflicts detected", "exit_code": 1}'
     exit 1
 fi
 
@@ -39,100 +39,98 @@ BACKUP_DATE=$(date +%Y-%m-%d)
 BACKUP_DIR="temp/merge-backups/$BACKUP_DATE"
 
 if ! mkdir -p "$BACKUP_DIR"; then
-    echo '{"status": "error", "message": "Failed to create backup directory", "backup_dir": "'"$BACKUP_DIR"'", "exit_code": 3}'
+    jq -n --arg dir "$BACKUP_DIR" \
+        '{"status": "error", "message": "Failed to create backup directory", "backup_dir": $dir, "exit_code": 3}'
     exit 3
 fi
 
-# Initialize JSON output
-CONFLICTS_JSON="["
-FIRST=true
+# Build JSON array of conflicts using jq
+CONFLICTS_JSON="[]"
 BACKUP_COUNT=0
 BACKUP_FAILED=()
 
 while IFS= read -r file; do
     [[ -z "$file" ]] && continue
-    
+
     # Create parent directory in backup location
     FILE_DIR=$(dirname "$file")
     mkdir -p "$BACKUP_DIR/$FILE_DIR" 2>/dev/null || true
-    
-    # Copy file to backup
-    BACKED_UP=false
-    if cp "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
-        BACKED_UP=true
+
+    # Copy file to backup (preserve symlinks if any)
+    BACKED_UP="false"
+    if cp -P "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
+        BACKED_UP="true"
         ((BACKUP_COUNT++))
     else
         BACKUP_FAILED+=("$file")
     fi
-    
+
     # Find conflict line numbers (where <<<<<<< HEAD appears)
-    CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//')
+    # Handle binary files gracefully
+    if file "$file" | grep -q "text"; then
+        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
+    else
+        CONFLICT_LINES="binary_file"
+    fi
     [[ -z "$CONFLICT_LINES" ]] && CONFLICT_LINES="unknown"
-    
+
     # Determine conflict type by analyzing the file
     CONFLICT_TYPE="MODIFICATION"  # default
-    
+
     # Check if file exists in HEAD
     if ! git show HEAD:"$file" &>/dev/null; then
         CONFLICT_TYPE="ADDITION"
     else
         # Check if incoming side deleted the file
         # (conflict markers present but file was deleted on one side)
-        if grep -q "<<<<<<< HEAD" "$file" && grep -q ">>>>>>>" "$file"; then
+        if [[ "$CONFLICT_LINES" != "binary_file" ]] && grep -q "<<<<<<< HEAD" "$file" && grep -q ">>>>>>>" "$file"; then
             # Check the content between markers
             HEAD_CONTENT=$(sed -n '/<<<<<<< HEAD/,/=======/p' "$file" 2>/dev/null | grep -v "<<<<<<< HEAD" | grep -v "=======" || true)
             INCOMING_CONTENT=$(sed -n '/=======/,/>>>>>>>/p' "$file" 2>/dev/null | grep -v "=======" | grep -v ">>>>>>>" || true)
-            
-            if [[ -z "$HEAD_CONTENT" ]]; then
-                CONFLICT_TYPE="DELETION"  # HEAD side is empty
-            elif [[ -z "$INCOMING_CONTENT" ]]; then
-                CONFLICT_TYPE="DELETION"  # Incoming side is empty
+
+            # Check for whitespace-only content (not truly empty)
+            if [[ -z "$(echo "$HEAD_CONTENT" | tr -d '[:space:]')" ]]; then
+                CONFLICT_TYPE="DELETION"  # HEAD side is empty/whitespace-only
+            elif [[ -z "$(echo "$INCOMING_CONTENT" | tr -d '[:space:]')" ]]; then
+                CONFLICT_TYPE="DELETION"  # Incoming side is empty/whitespace-only
             fi
         fi
     fi
-    
-    # Escape file path for JSON
-    FILE_ESCAPED=$(echo "$file" | sed 's/"/\\"/g')
-    
-    # Build JSON object for this conflict
-    if [[ "$FIRST" == "true" ]]; then
-        FIRST=false
-    else
-        CONFLICTS_JSON+=","
-    fi
-    
-    CONFLICTS_JSON+='
-    {
-      "file": "'"$FILE_ESCAPED"'",
-      "lines": ['"$CONFLICT_LINES"'],
-      "type": "'"$CONFLICT_TYPE"'",
-      "backed_up": '"$BACKED_UP"'
-    }'
-    
-done <<< "$CONFLICTED_FILES"
 
-CONFLICTS_JSON+="
-  ]"
+    # Use jq to build conflict object and append to array
+    CONFLICTS_JSON=$(jq -n \
+        --argjson conflicts "$CONFLICTS_JSON" \
+        --arg file "$file" \
+        --arg lines "$CONFLICT_LINES" \
+        --arg type "$CONFLICT_TYPE" \
+        --argjson backed_up "$BACKED_UP" \
+        '$conflicts + [{file: $file, lines: $lines, type: $type, backed_up: $backed_up}]')
+
+done <<< "$CONFLICTED_FILES"
 
 # Count total conflicts
 CONFLICT_COUNT=$(echo "$CONFLICTED_FILES" | wc -l | tr -d ' ')
 
-# Escape commit message for JSON
-COMMIT_MESSAGE_ESCAPED=$(echo "$COMMIT_MESSAGE" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
-
-# Build final JSON output
-cat <<EOF
-{
-  "status": "conflicts_found",
-  "commit_sha": "$COMMIT_SHA",
-  "commit_message": "$COMMIT_MESSAGE_ESCAPED",
-  "backup_dir": "$BACKUP_DIR",
-  "conflict_count": $CONFLICT_COUNT,
-  "backed_up_count": $BACKUP_COUNT,
-  "conflicts": $CONFLICTS_JSON,
-  "exit_code": 0
-}
-EOF
+# Build final JSON output using jq for proper escaping
+jq -n \
+    --arg status "conflicts_found" \
+    --arg sha "$COMMIT_SHA" \
+    --arg message "$COMMIT_MESSAGE" \
+    --arg backup_dir "$BACKUP_DIR" \
+    --argjson conflict_count "$CONFLICT_COUNT" \
+    --argjson backed_up_count "$BACKUP_COUNT" \
+    --argjson conflicts "$CONFLICTS_JSON" \
+    --argjson exit_code 0 \
+    '{
+        status: $status,
+        commit_sha: $sha,
+        commit_message: $message,
+        backup_dir: $backup_dir,
+        conflict_count: $conflict_count,
+        backed_up_count: $backed_up_count,
+        conflicts: $conflicts,
+        exit_code: $exit_code
+    }'
 
 exit 0
 

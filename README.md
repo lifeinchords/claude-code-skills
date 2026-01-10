@@ -1,10 +1,12 @@
-# Upstream Cherry Pick Skill
+# Cherry-Pick Agentic Patterns Skill
 
-A [`Claude Code skill`](https://code.claude.com/docs/en/skills) for capturing reusable agentic development patterns from project repos to upstream templates.
+A [`Claude Code Skill`](https://code.claude.com/docs/en/skills) for bringing reusable agentic dev patterns from project repos to your upstream template.
 
-Many developers maintain a template repo that gets cloned or forked to start new projects. Over time, project repos accumulate process improvements that would benefit other projects.
+## Why?
 
-This skill provides a harness for Claude to safely cherry-pick commits from an inherited project repo to the upstream template repo. Other projects can then pull and reuse these improvements.
+Developers often maintain a template repo that gets cloned or forked to start new projects. Over time, downstream project repos accumulate process improvements that would benefit other projects.
+
+This skill provides a harness for Claude Code to safely cherry-pick commits from an inherited project repo to its upstream template repo.
 
 ```mermaid
 flowchart BT
@@ -14,104 +16,90 @@ flowchart BT
     upstream -.->|git pull| py
 ```
 
-This skill operates on **two repos**: your project and your template. Claude will `cd` between them during execution, so both need to be cloned locally in Claude-accessible paths with push access.
+This skill operates on **two repos**: your **project** and your **template.** Claude will `cd` between them during execution, so both need to be cloned locally in Claude-accessible paths with push access.
 
-Whether your project was created via `git clone`, GitHub fork, or template, the cherry-pick mechanics are identical. The key requirement is push access to the template repo.
-
+Whether your project was created via `git clone`, GitHub fork, template copy, or manual file copy, the cherry-pick mechanics are identical. The key requirement is push access to the template repo.
 
 ## What makes this a skill
 
-Claude can cherry-pick without a skill. The skill's value is **consistency and safety**:
+Claude can cherry-pick well without a skill, so why use this? The value is **consistency and safety**:
 
 - Domain knowledge (what's "process engineering" vs project-specific)
-- Safety gates (operator review, no auto-resolving conflicts)
-- Executable scripts (deterministic classification outside context window)
+- Consistent + reliable safety gates (operator review, no auto-resolving conflicts)
+- External helper scripts: (`preflight-check.sh`, `classify-commits.sh`) handle mechanical, deterministic operations. This saves lots of precious tokens that don't need to be in the invoking chat's context window.
 
-Helper scripts (`preflight-check.sh`, `classify-commits.sh`) handle mechanical, determinstic operations, while Claude uses its judgement in the conversation flow to initiate the skill when it recognizes the opportunity.
+## How this skill determines what to cherry-pick
 
-## Scope: Process Engineering Only
+Claude uses its judgment to identify and extract reusable **agentic engineering patterns** (anything related to agents, skills, hooks, agentic-focused docs, MCP configs, AI workflow scripts ), while ignoring feature code and project-specific changes. See full classification details in [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md). 
 
-This skill is narrowly scoped to **agentic development improvements**, not general cherry-picking.
-
-##### Examples of how this skill defines shareable work
-
-Claude uses its judgment based on file paths, commit files, commit messages:
-
-- Agent definitions (`.claude/agents/`)
-- Claude Skills (`.claude/skills/`)
-- Claude Hooks (`.claude/hooks/`)
-- Generic and IDE-specific MCP server configs (`.mcp.json` for Claude Code, `.cursor/mcp.json` for Cursor)
-- Cursor rules (`.cursor/rules/*.mdc`)
-- Process documentation (`docs/process/`)
-- Bash workflow scripts (`tools/`, `scripts/`)
-- CLAUDE.md rule updates
-- Reusable automation harnesses
-- Prompts
-
-##### Not for
-
-- Feature code, business logic
-- Project configs (package.json name, workspace files)
-- PRDs, project-specific docs
-- general dot and environment files
-
-Easily extend this to match your process. For example, if your editor is Google Antigravity, add it to the skill [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md):
-  `- Google Antigravity config folder ~/.antigravity/`
+This skill focuses on Cursor and Claude Code tooling, but it should broadly recognize others too. If needed, add an example, ie: `Google Antigravity configs (~/.antigravity/)`
 
 ## Usage
 
-Claude will run the skill in several ways:
+You can run the skill at any time, but the magic is once it's set up, Claude Code **proactively watches your work** and suggests running this skill when it notices opportunities to share patterns upstream. 
 
-- when it sees that your commit contains changes to high-signal files as listed in the [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md)
-- when you mention higher-level related ideas in your chat, like "share upstream", "template", or "reusable", or ask it [explicitly](#explicit-prompt)
-- by running it manually with the Claude Code [slash command](https://code.claude.com/docs/en/slash-commands#encourage-claude-to-use-specific-commands) `/upstream-cherry-pick`. This matches the skill [`name`](/.claude/skills/upstream-cherry-pick/SKILL.md).
+**Claude automatically proposes this skill:**
+- After you push commits touching high-signal paths (`.claude/`, `.cursor/rules/`, MCP configs, etc.)
+- In sprint/milestone reviews chats
+- When you set up new agentic tooling (agents, skills, hooks, workflow scripts)
 
-
+**You can also invoke it manually:**
+- Mention words or phrases like "share upstream" or "template" in conversation
+- Run the slash command `/upstream-cherry-pick` explicitly
+- Ask Claude to check recent commits for shareable patterns
 
 ## Setup
 
-#### Prerequisites
+### Prerequisites
 
-The skill requires `gh` (GitHub CLI) and `jq`. See [Dependencies](/.claude/skills/upstream-cherry-pick/SKILL.md#dependencies) in the skill for details.
+This skill is currently **macOS only**. Claude will check for its dependencies when invoked: [`git`](https://git-scm.com/install), [`jq`](https://github.com/jqlang/jq), [`brew`](https://brew.sh/) and [`gh`](https://cli.github.com/). If any are missing, you'll be prompted to let Claude install them. See [Dependencies](/.claude/skills/upstream-cherry-pick/SKILL.md#dependencies).
 
-**Note:** Scripts currently support **macOS only** (uses `brew` for package management).  
+### Permissions & safety
 
-The skill will automatically check dependencies and environment when invoked. If missing, Claude will prompt for your approval to install via `brew install`.
+Read-only git operations defined in [SKILL.md's `allowed-tools`](/.claude/skills/upstream-cherry-pick/SKILL.md:6) let Claude bypass confirmation prompts.
 
-#### Permissions
+This skill, however, is designed to **always prompt for confirmation when running commands that modify state** (ie, `git cherry-pick`, `git stash`, `git push`, `git add`).
 
-The skill configures read-only git operations without confirmation prompts via the [`allowed-tools` frontmatter](/.claude/skills/upstream-cherry-pick/SKILL.md) in SKILL.md.
+To relax these guardrails, you'll need to align 2 things:
+- update the `allowed-tools` 
+- remove or rephrase safety gate instructions like "Do NOT auto-resolve conflicts" in [SKILL.md:338](/.claude/skills/upstream-cherry-pick/SKILL.md#L338)
 
-**Commands that modify state** (`git cherry-pick`, `git stash`, `git push`, `git add`) **always prompt for operator confirmation**. This is Claude Code's standard permission model; the skill does not bypass it.
+If Claude runs into conflicing instructions, it will follow the more restrictive path.
 
-To customize permissions (e.g., allow auto-commit), edit the `allowed-tools` block in [SKILL.md](/.claude/skills/upstream-cherry-pick/SKILL.md).
+## Example flow
 
+Here's a full example in the broader context of a sprint:
 
-## Example Flow
+### Sprint Timeline
 
-Here's an example in the broader context of a sprint:
-
-```bash
+```sh
 # Let's say you have this folder + repo structure
 cd ~/dev-projects
 
 ls
-> shared-agentic-template # upstream, the team's source of truth
-> python-backend/ # derived from shared-agentic-template
-> typescript-frontend/ # derived from shared-agentic-template
+> shared-agentic-template/   # upstream, your source of truth
+> python-backend/            # derived from shared-agentic-template
+> typescript-frontend/       # derived from shared-agentic-template
 
 # get this repo
 git clone git@github.com:lifeinchords/claude-code-skills
 
-# bring this repo's cherry-pick skill to your upstream shared template
+# bring this repo's cherry-pick skill to your shared template
 cp -r claude-code-skills/.claude/skills/upstream-cherry-pick shared-agentic-template/.claude/skills/
-git commit -am "[Skill] Adding a guided cherry-picking process"
+git commit -am "[Skill] Adding an agentic pattern cherry-picking process"
 git push upstream
 
-# now do a bunch of work on a downstream project.
-# Keep project-specific and generic work in separate commits
-# so cherry-picking upstream is clean
-cd typescript-frontend
+# now bring your shiny new skill down from the upstream template
+cd ~/dev-projects/typescript-frontend
+git pull upstream main
+
+# allow Claude to execute the skill
+chmod +x .claude/skills/upstream-cherry-pick/scripts/*.sh
+
+# now say you begin the sprint on typescript-frontend project,
+# doing your best to keep project-specific and generic work 
+# isolated in separate commits
+claude 
 
 # start some project work Monday
 # 2c8e7a3
@@ -127,123 +115,127 @@ git commit -am "[process] Add PR orchestrator agent"
 
 # and a new rule
 # 7b2e9d4
-git commit -am "[process] Add commit splitting rule"
+git commit -am "Add commit splitting rule"
 
-# Thursday, continue on some more project work
+# Thursday, continue on some project planning + docs
 # f1b3d92
 git commit -am "PRD v2"
 
 # Friday, add another skill that might be useful
 # e5c1a08
-git commit -am "[process] WIP: Add playwright debugging skill"
+git commit -am "[process] WIP: Add Playwright debugging skill"
 ```
 
-Now at the end of the sprint, you're ready to pull some things upstream:
+### Skill Invocation
 
-```bash
-# make sure you're in the project dir
-pwd
-> ~/dev-projects/typescript-frontend
+After pushing commit `e5c1a08` on Friday, you say to Claude:
 
-# get your shiny new cherry-picking skill from the upstream template
-git pull upstream main
-
-# allow Claude to run it
-chmod +x .claude/skills/upstream-cherry-pick/scripts/*.sh
-
-# enter Claude Code
-claude
+```sh
+ok, wrapped up the sprint. Let's update the Trello board
 ```
 
-<a id="explicit-prompt"></a>
-Now ask Claude something like:
+Claude responds:
 
-```bash
-I've done a bunch of work in this repo recently. I'd like to cherry-pick anything that's generic to our upstream template.
-
-Let's consider only the last 6 commits
+```sh
+> Before we update Trello, since you mentioned we are done—
+> I can use the upstream-cherry-pick skill to identify and bring shareable agentic patterns
+> upstream to your template. Would you like me to run it?
 ```
 
-This skill defaults to the last 10 commits. You can change [this default](.claude/skills/upstream-cherry-pick/SKILL.md#invocation) in the skill, and decide at runtime. Claude will adapt accordingly:
+**But how did it know *now* is a good time to prompt you about this skill?** 
 
-```bash
-> Ok great! I'll only check the last 6
+The **metadata** for all the skills defined in your project's persists in every Claude Code session. It recognized the opportunity because it connects the dots via the criteria we described in [this skill's `description`](/.claude/skills/upstream-cherry-pick/SKILL.md:3):
+
+  > Cherry-pick agentic patterns from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: YES (portable), MAYBE (needs changes/judgment—offer to fix), or NO (project-specific). YES examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/process/, CLAUDE.md, workflow scripts. NOT FOR: feature code, business logic, PRDs, project configs, env files. For MAYBE commits: present with "Offer:" describing what needs fixing
+
+You respond:
+
+```sh
+oh, good idea, ok.. let's only check this week's commits
 ```
 
-Claude now analyzes your 6 most recent commits to the typescript-frontend project and gives you its recommendations in 3 buckets:
+The skill [defaults to the last 10 commits](.claude/skills/upstream-cherry-pick/SKILL.md#invocation), but Claude adapts to your request, understanding you made 6 commits to `typescript-frontend` this week. 
 
-- **Ready**: Generic process tooling, cherry-pick as-is
-- **Refinable**: Useful tooling with hardcoded paths/names. Claude offers to generalize first
-- **Excluded**: Project-specific, skip these
+It invokes this skill and presents recommendations in 3 buckets:
 
+- **YES**: process engineering tooling that's portable, cherry-pick as-is
+- **MAYBE**: candidates that need changes or judgment, with update proposals
+- **NO**: Project-specific code, skip these
 
-```bash
-> READY TO CHERRY-PICK (oldest first):
->
+### Recommendations
+
+```sh
+> CHERRY PICK RECOMMENDATION (oldest first):
+> 
+> YES (cherry-pick as-is):
 > | SHA     | Message                                             |
 > |---------|-----------------------------------------------------|
 > | a3f8c21 | [process] Add PR orchestrator agent                 |
-> |         | -- .claude/agents/orchestrator.md                   |
-> |         | -- docs/process/pr-review.md                        |
->
+> |         | -> .claude/agents/orchestrator.md                   |
+> |         | -> docs/process/pr-review.md                        |
 > | 7b2e9d4 | [process] Add commit splitting rule                 |
-> |         | -- .claude/CLAUDE.md                                |
->
->
-> REFINABLE (useful but has hardcoded elements):
->
-> | SHA     | Message                                             |
-> |---------|-----------------------------------------------------|
-> | e5c1a08 | [process] WIP: Add playwright debugging skill       |
-> |         | -- .claude/skills/playwright-debugging/SKILL.md     |
-> |         | Blocker: Hardcoded path `/Users/alex/ts-frontend`   |
-> |         | Offer: replace `alex` with $PROJECT_ROOT.           |
->
->
-> EXCLUDED (project-specific):
->
+> |         | -> .claude/CLAUDE.md                                |
+> 
+> MAYBE (needs changes or judgment):
+> | SHA     | Message                                | Offer                    |
+> |---------|----------------------------------------|--------------------------|
+> | e5c1a08 | Add Playwright debugging skill         | Parameterize path        |
+> |         | -> .claude/skills/playwright/SKILL.md  | /Users/alex -> $PROJECT  |
+> 
+> NO (project-specific):
 > | SHA     | Message                        | Reason              |
 > |---------|--------------------------------|---------------------|
-> | 2c8e7a3 | Update package.json name       | Config related      |
-> |         | -- package.json                |                     |
->
+> | 2c8e7a3 | Update package.json name       | Config change       |
+> |         | -> package.json                |                     |
 > | 9d4f2b1 | Add user auth flow             | Feature code        |
-> |         | -- src/auth/login.ts           |                     |
-> |         | -- src/auth/session.ts         |                     |
->
+> |         | -> src/auth/login.ts           |                     |
+> |         | -> src/auth/session.ts         |                     |
 > | f1b3d92 | PRD v2                         | Project docs        |
-> |         | -- docs/prd-v2.md              |                     |
->
-> Proceed with only READY commits? Or, we can pause cherry-picking and I can generalize the refinable commits first?
+> |         | -> docs/prd-v2.md              |                     |
+> 
+> Proceed?
+
 ```
 
-You can respond in several ways:
+### Choose your adventure
 
-
-#### Option 1: Refine first, then cherry-pick
-```bash
-yes, but let's refine e5c1a08 first
+**Option 1: Cherry-pick all the proposed commits**
+```sh
+proceed with all the YESes
 ```
 
-If you choose to refine, Claude will:
-1. Pause cherry-picking
-2. Make the code generic (in this case, it would do what it offered: replace `alex` with $PROJECT_ROOT)
+**Option 2: Fix a MAYBE commit first, then cherry-pick**
+```sh
+let's fix the MAYBE e5c1a08 now
+```
+
+Claude will then:
+1. Pause the cherry-pick workflow
+2. Make the fix (in this case: replace `/Users/alex/dev-projects/typescript-frontend` with `$PROJECT`)
 3. Show you the diff and proposed commit message
 4. Wait for your approval before committing
 5. Resume cherry-picking after
 
-#### Option 2: Skip the refinable commit for now
-```bash
-yes to the ready commits, but let's skip e5c1a08 - I'll refine it later
-```
-Claude confirms:
-```bash
-> Ok great, I will cherry-pick `a3f8c21` first, then `7b2e9d4`.
+**Option 3: Skip MAYBE commits**
+```sh
+yes to all the YES commits and skip the MAYBE ones
 ```
 
-Once you've agreed on the list, Claude does a pre-flight check on the upstream repo and stops if:
-
+**Option 4: Stop**
+```sh
+actually, changed my mind. Let's go back to Trello stuff
 ```
+
+### What Happens Next
+
+Say you go with Option 3, `Skip MAYBE commits`. Claude confirms which commits will be cherry-picked:
+```sh
+> Ok, I'll cherry-pick a3f8c21 and 7b2e9d4
+```
+
+It does its pre-flight check on the upstream repo, finds a blocker and stops:
+
+```sh
 > Upstream repo has uncommitted changes:
 > modified: -- docs/API.md
 > modified: -- tsconfig.json
@@ -253,9 +245,9 @@ Once you've agreed on the list, Claude does a pre-flight check on the upstream r
 
 If you confirm, Claude stashes these files and begins applying the agreed-on commits chronologically. In this example, your oldest cherry-pickable commit is Wednesday's `a3f8c21`.
 
-It then continues to the next commit. If it hits a merge conflict, Claude stops immediately and asks:
+It then continues to the next commit. If Claude hit a merge conflict, it stops immediately, summarizes the issue and asks you what to do:
 
-```
+```sh
 > MERGE CONFLICT DETECTED
 >
 > Commit: 7b2e9d4 - [process] Add commit splitting rule
@@ -277,34 +269,41 @@ It then continues to the next commit. If it hits a merge conflict, Claude stops 
 
 You can then fix the conflict manually and resume:
 
-```
-ok, we're good to go.. complete the rest
+```sh
+ok, I fixed the issue on my end. we're good to go.. complete the rest
 ```
 
-Claude completes the process, and in this example, the final state is:
+### Outcome
 
-- `shared-agentic-template` repo now has commits `a3f8c21` and `7b2e9d4` from `typescript-frontend` repo
+Claude completes the process, resulting with:
+
+- the upstream `shared-agentic-template` repo now has commits `a3f8c21` and `7b2e9d4` from the downstream `typescript-frontend` project repo
+
 - `~/dev-projects/shared-agentic-template` folder now has previously stashed files back in its working directory:
+  ```sh
   > modified: docs/API.md
   > modified: tsconfig.json
-- the upstream remote in `typescript-frontend` git config is flipped backed to `DISABLED` to prevent accidental project-related commits
+  ```
 
-Finally, you can now share these improvements downstream on another project:
+- in the `typescript-frontend` project, the `upstream` remote (pointing to `shared-agentic-template`) is flipped back to `push-disabled` so you can't accidentally push project code to the template.
 
-```bash
+
+You can now share these improvements downstream on any derived project:
+
+```sh
 cd ~/dev-projects/python-backend
 
 # adds commits a3f8c21 and 7b2e9d4 to python-backend
 git pull upstream main
 ```
 
-
 ## Todo
 
+- Extract more determinsitic parts of the skill to helpers to reduce the SKILL.md size
 - Add Windows and Linux cross-environment compatibility
+- Make helper scripts shell-agnostic, ie fish, zsh
 
-
-## running braindump of things to try next
+## braindump of things to try next
 
 - Karpathy's Software 3.0 talk: autonomy slider, describe single next concrete incremental change, tight leash. Try applying these to Skill design
 

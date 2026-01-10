@@ -39,14 +39,35 @@ set -euo pipefail
 REMOTE_BRANCH="${1:-}"
 COUNT="${2:-10}"
 
+# Validate inputs to prevent command injection
 if [[ -z "$REMOTE_BRANCH" ]]; then
     echo '{"error": "No remote/branch provided. Usage: classify-commits.sh <remote/branch> [count]"}'
     exit 1
 fi
 
+# Sanitize REMOTE_BRANCH: only allow alphanumeric, slash, hyphen, underscore, dot
+# This prevents command injection attacks like "main; rm -rf /"
+if [[ ! "$REMOTE_BRANCH" =~ ^[a-zA-Z0-9/_.-]+$ ]]; then
+    jq -n --arg branch "$REMOTE_BRANCH" '{"error": "Invalid branch name. Only alphanumeric, /, -, _, . allowed", "branch": $branch}'
+    exit 1
+fi
+
+# Validate COUNT is a positive integer
+if [[ ! "$COUNT" =~ ^[0-9]+$ ]] || [[ "$COUNT" -eq 0 ]]; then
+    jq -n --arg count "$COUNT" '{"error": "Count must be a positive integer", "count": $count}'
+    exit 1
+fi
+
+# Cap COUNT at reasonable limit to prevent overwhelming output
+if [[ "$COUNT" -gt 100 ]]; then
+    jq -n '{"error": "Count cannot exceed 100 commits"}'
+    exit 1
+fi
+
 # Verify the remote branch exists
 if ! git rev-parse --verify "$REMOTE_BRANCH" &>/dev/null; then
-    echo '{"error": "Remote branch not found", "branch": "'"$REMOTE_BRANCH"'"}'
+    # Use jq for proper JSON escaping
+    jq -n --arg branch "$REMOTE_BRANCH" '{"error": "Remote branch not found", "branch": $branch}'
     exit 1
 fi
 
@@ -147,24 +168,23 @@ while IFS= read -r line; do
         fi
     fi
 
-    # Escape message for JSON
-    MESSAGE_ESCAPED=$(echo "$MESSAGE" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
-    FILES_ESCAPED=$(echo "$FILES" | sed 's/"/\\"/g')
-
-    # Output JSON object
+    # Output JSON object using jq for proper escaping
+    # This handles all special characters including newlines, quotes, backslashes
     if [[ "$FIRST" == "true" ]]; then
         FIRST=false
     else
         echo ","
     fi
 
-    echo '  {'
-    echo '    "sha": "'"$SHA"'",'
-    echo '    "message": "'"$MESSAGE_ESCAPED"'",'
-    echo '    "classification": "'"$CLASSIFICATION"'",'
-    echo '    "reason": "'"$REASON"'",'
-    echo '    "files": "'"$FILES_ESCAPED"'"'
-    echo -n '  }'
+    # Use jq to properly escape all values and construct JSON
+    jq -n \
+        --arg sha "$SHA" \
+        --arg message "$MESSAGE" \
+        --arg classification "$CLASSIFICATION" \
+        --arg reason "$REASON" \
+        --arg files "$FILES" \
+        '{sha: $sha, message: $message, classification: $classification, reason: $reason, files: $files}' | \
+    sed 's/^/  /' | sed '$ s/$/\n/' | tr -d '\n'
 
 done < <(git log "$REMOTE_BRANCH" --oneline -"$COUNT" --reverse)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # check-deps.sh
-# Checks if required dependencies (gh, jq) are installed
+# Checks if required dependencies (git, gh, jq) are installed
 # Offers to install via brew if missing
 #
 # Platform: macOS only (uses brew for package management)
@@ -18,15 +18,27 @@
 
 set -euo pipefail
 
-REQUIRED_DEPS=("gh" "jq")
+REQUIRED_DEPS=("git" "gh" "jq")
+
+# JSON string escape function (can't use jq yet - it might be missing!)
+# Escapes quotes, backslashes, and control characters
+json_escape() {
+    printf '%s' "$1" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read())[1:-1])'
+}
 
 # Check operating system
 if [[ "$(uname -s)" != "Darwin" ]]; then
-    echo '{"status": "error", "message": "Unsupported operating system. This skill currently only supports macOS.", "os": "'"$(uname -s)"'", "required_deps": ["gh", "jq"]}'
+    OS_NAME=$(json_escape "$(uname -s)")
+    echo '{"status": "error", "message": "Unsupported operating system. This skill currently only supports macOS.", "os": "'"$OS_NAME"'", "required_deps": ["git", "gh", "jq"]}'
     exit 3
 fi
 
 MISSING_DEPS=()
+
+# Check git
+if ! command -v git &>/dev/null; then
+    MISSING_DEPS+=("git")
+fi
 
 # Check gh CLI
 if ! command -v gh &>/dev/null; then
@@ -38,9 +50,9 @@ if ! command -v jq &>/dev/null; then
     MISSING_DEPS+=("jq")
 fi
 
-# All deps present
+# All deps present - NOW we can use jq safely (if it's installed)!
 if [[ ${#MISSING_DEPS[@]} -eq 0 ]]; then
-    echo '{"status": "ok", "message": "All dependencies installed", "gh": true, "jq": true}'
+    jq -n '{"status": "ok", "message": "All dependencies installed", "git": true, "gh": true, "jq": true}'
     exit 0
 fi
 
@@ -61,7 +73,8 @@ echo '{"status": "missing", "missing": '"$MISSING_JSON"', "message": "Some depen
 
 # Check if brew is available
 if ! command -v brew &>/dev/null; then
-    echo '{"status": "error", "message": "brew not found. Please install missing dependencies manually: '"${MISSING_DEPS[*]}"'"}'
+    DEPS_LIST=$(json_escape "${MISSING_DEPS[*]}")
+    echo '{"status": "error", "message": "brew not found. Please install missing dependencies manually: '"$DEPS_LIST"'"}'
     exit 1
 fi
 
@@ -82,12 +95,26 @@ echo "Installing: ${MISSING_DEPS[*]}..."
 for dep in "${MISSING_DEPS[@]}"; do
     echo "  -> brew install $dep"
     if ! brew install "$dep"; then
-        echo '{"status": "error", "message": "Failed to install '"$dep"'", "missing": '"$MISSING_JSON"', "failed": "'"$dep"'"}'
+        # If jq was just installed, we can use it now; otherwise use json_escape
+        if command -v jq &>/dev/null; then
+            jq -n \
+                --arg dep "$dep" \
+                --argjson missing "$MISSING_JSON" \
+                '{"status": "error", "message": ("Failed to install " + $dep), "missing": $missing, "failed": $dep}'
+        else
+            DEP_ESCAPED=$(json_escape "$dep")
+            echo '{"status": "error", "message": "Failed to install '"$DEP_ESCAPED"'", "missing": '"$MISSING_JSON"', "failed": "'"$DEP_ESCAPED"'"}'
+        fi
         exit 2
     fi
 done
 
 echo ""
-echo '{"status": "ok", "message": "Dependencies installed successfully", "installed": '"$MISSING_JSON"'}'
+# Now jq should be available after installation
+if command -v jq &>/dev/null; then
+    jq -n --argjson installed "$MISSING_JSON" '{"status": "ok", "message": "Dependencies installed successfully", "installed": $installed}'
+else
+    echo '{"status": "ok", "message": "Dependencies installed successfully", "installed": '"$MISSING_JSON"'}'
+fi
 exit 0
 
