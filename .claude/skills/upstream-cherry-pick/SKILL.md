@@ -65,6 +65,14 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 
 Claude interprets script output and handles edge cases requiring judgment.
 
+## Operator confirmation gates (safety-first)
+
+This skill must **not** change repo state without explicit operator confirmation immediately before the command is run.
+
+State-changing commands include (non-exhaustive): `git remote add/remove/set-url`, `git fetch`, `git pull`, `git stash push/pop`, `git cherry-pick`, `git add`, `git commit`, `git push`, and any filesystem writes outside `temp/merge-backups/`.
+
+If the operator says “no” (or is unclear), stop and ask what to do next.
+
 
 ## Invocation
 
@@ -181,6 +189,8 @@ git remote add tmp-project https://github.com/<org>/<project-repo>.git
 git fetch tmp-project
 ```
 
+Operator confirmation REQUIRED before each of: `git remote add …`, `git fetch …`
+
 ### Step 2: List and classify commits
 
 Run the list script to get commit metadata:
@@ -272,6 +282,8 @@ git cherry-pick <sha1> <sha2> <sha3>
 # Cherry-pick a range (start is exclusive, end is inclusive)
 git cherry-pick <start-sha>^..<end-sha>
 ```
+
+Operator confirmation REQUIRED before running any `git cherry-pick …`
 
 ### Step 5: Handle conflicts (OPERATOR REQUIRED)
 
@@ -366,6 +378,8 @@ git remote -v
 git stash pop
 ```
 
+Operator confirmation REQUIRED before each of: `git push …`, `git remote remove …`, `git stash pop`
+
 ### Step 7: Return to project and secure upstream
 
 ```bash
@@ -383,6 +397,8 @@ If upstream remote exists, disable push to prevent accidentally pushing project 
 # Allows: git pull upstream main (to get future template updates)
 git remote set-url --push upstream DISABLED
 ```
+
+Operator confirmation REQUIRED before: `git remote set-url --push …`
 
 **Why disable push?** The upstream remote points to your template repo. Disabling push prevents accidentally running `git push upstream` from your project, which would pollute the template with project-specific code. You can still fetch/pull template updates; only pushes are blocked.
 
