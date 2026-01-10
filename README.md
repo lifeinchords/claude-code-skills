@@ -44,9 +44,9 @@ This skill focuses on Cursor and Claude Code tooling, but it should broadly reco
 
 ## Usage
 
-You can run the skill at any time, but the magic is once it's set up, Claude Code **proactively watches your work** and suggests running this skill when it notices opportunities to share patterns upstream. 
+You can run the skill at any time. In Claude Code, skills can also be **suggested** when your session context indicates it’s a good time to share patterns upstream (based on the skill’s metadata + what you’re working on). This is advisory and not guaranteed.
 
-**Claude automatically proposes this skill:**
+**Claude may propose this skill:**
 - After you push commits touching high-signal paths (`.claude/`, `.cursor/rules/`, MCP configs, etc.)
 - In sprint/milestone reviews chats
 - When you set up new agentic tooling (agents, skills, hooks, workflow scripts)

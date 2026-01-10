@@ -1,17 +1,14 @@
 ---
 name: upstream-cherry-pick
 description: >
-  Cherry-pick agentic patterns from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: YES (portable), MAYBE (needs changes/judgment—offer to fix), or NO (project-specific). YES examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/process/, CLAUDE.md, workflow scripts. NOT FOR: feature code, business logic, PRDs, project configs, env files. For MAYBE commits: present with "Offer:" describing what needs fixing
+  Share reusable agentic patterns from project repos back into an upstream template, safely. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: YES (portable), MAYBE (needs changes/judgment—offer to fix), or NO (project-specific). Then prompt the operator for mode (cherry-pick vs squash) and delivery (PR vs direct push) with explicit confirmation gates. For classification, you MUST follow EXAMPLES.md patterns (content-based, not just paths).
+version: 2026-01-10
+directory: .claude/skills/upstream-cherry-pick
 user-invocable: yes
 allowed-tools:
   - Read
   - Grep
   - Glob
-  - Bash(./scripts/check-deps.sh:*)
-  - Bash(./scripts/preflight-check.sh:*)
-  - Bash(./scripts/list-commits.sh:*)
-  - Bash(./scripts/detect-mode.sh:*)
-  - Bash(./scripts/conflict-backup.sh:*)
   - Bash(./.claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)
   - Bash(./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)
   - Bash(./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)
@@ -34,14 +31,11 @@ allowed-tools:
 
 ## Purpose
 
-Situations where a template repository that gets cloned or
-forked to start new projects. Over time, project repos accumulate improvements
-that could flow back to the template for other projects to inherit.
+Situations where a template repository that gets cloned or forked to start new projects. Over time, project repos accumulate improvements that could flow back to the template for other projects to inherit.
 
-This skill guides Claude through safely cherry-picking commits from a project
-repo to the upstream template repo.
+This skill guides Claude through safely identifying **reusable agentic patterns** in a project repo and bringing them into an upstream template repo with clear operator decisions (mode + delivery) and strict safety gates (no surprise git state changes).
 
-## Dependencies
+## Prerequisites (Dependencies + local repos)
 
 This skill requires:
 - `gh` - GitHub CLI for repo verification and commit preview
@@ -52,13 +46,18 @@ This skill requires:
 - Standard Unix utilities (typically preinstalled): `grep`, `sed`, `awk`, `cut`, `tr`, `wc`, `head`, `dirname`, `date`, `cp`, `mkdir`, `file`
 - Checksum utility for backups: `shasum` (macOS) or `sha256sum` (Linux)
 
+This skill also assumes:
+- **macOS** (the dependency installer uses Homebrew; Linux may work but is not currently tested/supported)
+- A local **project repo** (derived from the template, containing candidate commits)
+- A local **template repo** (the upstream destination, with push access)
+
 ## Scripts
 
-This skill includes executable scripts in `scripts/` that handle deterministic operations:
+This skill includes executable scripts in `.claude/skills/upstream-cherry-pick/scripts/` that handle deterministic operations:
 
 **preflight-check.sh** - Validates template repo state before cherry-picking
 ```bash
-./scripts/preflight-check.sh <template-repo-path>
+./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 # Returns JSON with status: clean, dirty, wrong_branch, or behind
 # Exit codes: 0=clean, 1=uncommitted changes, 2=wrong branch, 3=behind remote, 4=invalid path
 ```
@@ -67,21 +66,21 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 
 **list-commits.sh** - Lists commits with metadata (Claude does classification)
 ```bash
-./scripts/list-commits.sh <remote/branch> [count]
+./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh <remote/branch> [count]
 # Returns JSON array with: sha, message, files[]
 # NO classification - Claude inspects diffs and applies EXAMPLES.md guidance
 ```
 
 **conflict-backup.sh** - Detects conflicts, creates backups, outputs structured analysis
 ```bash
-./scripts/conflict-backup.sh [commit-sha] [commit-message]
+./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh [commit-sha] [commit-message]
 # Returns JSON with conflict details: files, line numbers, types, backup location
 # Exit codes: 0=conflicts backed up, 1=no conflicts, 2=not a repo, 3=backup failed
 ```
 
 **detect-mode.sh** - Suggests cherry-pick vs squash based on commit patterns
 ```bash
-./scripts/detect-mode.sh <remote/branch> [count]
+./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh <remote/branch> [count]
 # Returns JSON with: suggested_mode, reason, common_prefix, files[]
 # If all commits share a path prefix → suggests squash
 # If commits touch scattered paths → suggests cherry-pick
@@ -123,18 +122,9 @@ How many recent commits to scan? [default: 10]:
 
 Use this value for the git log command in Step 2.
 
-## Prerequisites
-
-A: **Dependencies**: `git`, `gh` (GitHub CLI), `jq`, and `brew` must be installed. Run `./scripts/check-deps.sh` to verify and install if needed. Currently macOS only.
-
-B: **Upstream template repo** exists locally (e.g., ~/dev-projects/shared-agentic-template)
-
-C: **Project repo** was originally cloned/forked from the template
-
-
 ## Classification Guidance
 
-Read **EXAMPLES.md** for detailed classification patterns with explanations.
+You MUST read **EXAMPLES.md** for the canonical YES/MAYBE/NO classification patterns. Classification is content-based (not just paths), and EXAMPLES.md is the source of truth.
 
 Classify commits into three buckets: **YES**, **MAYBE**, or **NO**.
 
@@ -157,7 +147,7 @@ Don't rely strictly on commit message prefixes like `[process]`. Use judgment ba
 - Feature code (`src/`, `app/`, `pages/`)
 - PRDs, project-specific docs
 - Environment files
-- IDE editor prefs (`.vscode/settings.json` with font/theme only)
+- IDE editor prefs (`.vscode/settings.json` with font/theme changes only)
 
 **MAYBE** (needs changes or judgment):
 - `.cursor/settings.json` → Inspect: AI model config = YES, editor prefs = NO
@@ -173,7 +163,7 @@ When uncertain, classify as MAYBE and present with an "Offer:" explaining what n
 Run the preflight script to validate template repo state:
 
 ```bash
-./scripts/preflight-check.sh <template-repo-path>
+./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 ```
 
 Handle based on exit code:
@@ -220,12 +210,12 @@ Operator confirmation REQUIRED before each of: `git remote add …`, `git fetch 
 
 **2a. List commits:**
 ```bash
-./scripts/list-commits.sh tmp-project/<branch> <N>
+./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh tmp-project/<branch> <N>
 ```
 
 **2b. Detect suggested mode:**
 ```bash
-./scripts/detect-mode.sh tmp-project/<branch> <N>
+./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh tmp-project/<branch> <N>
 ```
 
 If `suggested_mode` is `squash` (all commits share a path prefix), present mode choice to operator.
@@ -371,7 +361,7 @@ If cherry-pick reports conflicts, STOP immediately.
 Run the conflict backup script to detect, backup, and analyze conflicts:
 
 ```bash
-./scripts/conflict-backup.sh <commit-sha> "<commit-message>"
+./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh <commit-sha> "<commit-message>"
 ```
 
 The script returns JSON with:
@@ -388,49 +378,7 @@ git diff --diff-filter=U
 ```
 
 Present to operator with analysis:
-
-```
-MERGE CONFLICT DETECTED
-
-Commit: <sha> - <message>
-
-Conflicted files:
-1. <file1>
-   - Lines affected: <line numbers>
-   - Conflict type: <type>
-
-2. <file2>
-   - Lines affected: <line numbers>
-   - Conflict type: <type>
-
-CONFLICT ANALYSIS:
-
-File: <file1>
-  HEAD (template):   <brief description of current state>
-  INCOMING (project): <brief description of incoming change>
-
-  Recommendation: <one of below>
-    - ACCEPT INCOMING: Project version is newer/better
-    - KEEP HEAD: Template version should be preserved
-    - MERGE BOTH: Both changes are needed, combine manually
-    - NEEDS REVIEW: Complex conflict, operator must decide
-
-Backups saved to: temp/merge-backups/<date>/
-
-OPTIONS:
-
-A: Operator resolves conflicts manually, then run:
-   git add . && git cherry-pick --continue
-
-B: Abort this cherry-pick and skip this commit:
-   git cherry-pick --abort
-
-C: Abort all remaining cherry-picks:
-   git cherry-pick --abort
-   (do not continue with remaining commits)
-
-Waiting for operator action...
-```
+See the operator-ready conflict template in `CONFLICT_TEMPLATE.md` (this format is intentionally strict).
 
 Do NOT auto-resolve conflicts. Agent has no permission to modify conflict markers.
 
@@ -548,41 +496,9 @@ git status
 git log --oneline -5
 ```
 
-### Script Failures
+### Script outputs & exit codes (reference)
 
-**preflight-check.sh failures**:
-- Exit code 0: Clean state, ready to proceed
-- Exit code 1 (dirty): Stash or commit changes, then retry
-- Exit code 2 (wrong branch): Checkout default branch, then retry
-- Exit code 3 (behind/diverged): Pull latest changes, then retry
-- Exit code 4 (invalid path): Verify template path is correct
-
-**list-commits.sh failures**:
-- Exit code 1: Various errors including:
-  - No remote/branch provided: Check command syntax
-  - Invalid branch name: Only alphanumeric, /, -, _, . allowed
-  - Invalid count: Must be positive integer ≤100
-  - Remote branch not found: Run `git fetch tmp-project` first
-  - Output size exceeds 512KB: Reduce commit count
-
-**detect-mode.sh failures**:
-- Exit code 1: Same errors as list-commits.sh (uses same validation)
-- Output includes `suggested_mode`: "squash" or "cherry-pick"
-
-**check-deps.sh failures**:
-- Exit code 0: All dependencies available
-- Exit code 1: Missing dependencies, user declined install
-- Exit code 2: Installation failed - check network and brew status
-- Exit code 3: Unsupported OS (currently macOS only)
-- Common issues:
-  - "brew not found": Install Homebrew first, then retry
-  - "Missing git/gh/jq": Install manually or approve brew install
-
-**conflict-backup.sh failures**:
-- Exit code 0: Conflicts found and backed up successfully
-- Exit code 1: No conflicts detected (not an error)
-- Exit code 2: Not in a git repository
-- Exit code 3: Backup creation failed - check disk space and permissions
+Not all non-zero exits are “errors” (e.g. `conflict-backup.sh` uses exit code 1 to mean “no conflicts”). For a clean, extractable reference of each script’s JSON output and exit codes, see `SCRIPTS.md`.
 
 
 ## Rigor
