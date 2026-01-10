@@ -17,13 +17,36 @@
 # Output: JSON with status details
 
 set -euo pipefail
+IFS=$'\n\t'
+
+# Error trap for debugging
+trap 'echo "Error in check-deps.sh at line $LINENO" >&2' ERR
 
 REQUIRED_DEPS=("git" "gh" "jq")
 
 # JSON string escape function (can't use jq yet - it might be missing!)
-# Escapes quotes, backslashes, and control characters
+# Pure bash implementation - no external dependencies
+# Escapes quotes, backslashes, and control characters for JSON
 json_escape() {
-    printf '%s' "$1" | python3 -c 'import json, sys; print(json.dumps(sys.stdin.read())[1:-1])'
+    local input="$1"
+    local output=""
+    local char
+
+    for ((i=0; i<${#input}; i++)); do
+        char="${input:$i:1}"
+        case "$char" in
+            '"')  output+='\"' ;;
+            '\')  output='\\' ;;
+            $'\n') output+='\n' ;;
+            $'\r') output+='\r' ;;
+            $'\t') output+='\t' ;;
+            $'\b') output+='\b' ;;
+            $'\f') output+='\f' ;;
+            *)    output+="$char" ;;
+        esac
+    done
+
+    printf '%s' "$output"
 }
 
 # Check operating system

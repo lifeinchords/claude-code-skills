@@ -35,6 +35,10 @@
 #     - Mixed commits touching both generic and project-specific paths
 
 set -euo pipefail
+IFS=$'\n\t'
+
+# Error trap for debugging
+trap 'echo "Error in classify-commits.sh at line $LINENO" >&2' ERR
 
 REMOTE_BRANCH="${1:-}"
 COUNT="${2:-10}"
@@ -114,8 +118,8 @@ while IFS= read -r line; do
     SHA=$(echo "$line" | cut -d' ' -f1)
     MESSAGE=$(echo "$line" | cut -d' ' -f2-)
 
-    # Get files changed in this commit
-    FILES=$(git diff-tree --no-commit-id --name-only -r "$SHA" 2>/dev/null | tr '\n' '|')
+    # Get files changed in this commit (use NUL separator for safety with special chars in filenames)
+    FILES=$(git diff-tree --no-commit-id --name-only -z -r "$SHA" 2>/dev/null | tr '\0' '|')
     FILES="${FILES%|}"  # Remove trailing pipe
 
     # Determine classification

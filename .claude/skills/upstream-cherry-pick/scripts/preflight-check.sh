@@ -17,6 +17,10 @@
 # Output: JSON with status details
 
 set -euo pipefail
+IFS=$'\n\t'
+
+# Error trap for debugging
+trap 'echo "Error in preflight-check.sh at line $LINENO" >&2' ERR
 
 TEMPLATE_PATH="${1:-}"
 
@@ -26,12 +30,45 @@ if [[ -z "$TEMPLATE_PATH" ]]; then
     exit 4
 fi
 
+# Security: Validate path doesn't contain dangerous characters or sequences
+if [[ "$TEMPLATE_PATH" =~ [;\|\&\$\`] ]]; then
+    jq -n --arg path "$TEMPLATE_PATH" \
+        '{"error": "Invalid path contains dangerous characters", "path": $path, "exit_code": 4}'
+    exit 4
+fi
+
 if [[ ! -d "$TEMPLATE_PATH/.git" ]]; then
     jq -n --arg path "$TEMPLATE_PATH" '{"error": "Not a git repository", "path": $path, "exit_code": 4}'
     exit 4
 fi
 
-cd "$TEMPLATE_PATH"
+# Security: Canonicalize path and verify cd succeeds
+# Use realpath if available (GNU coreutils), fallback to pwd -P
+if command -v realpath &>/dev/null; then
+    CANONICAL_PATH=$(realpath "$TEMPLATE_PATH" 2>/dev/null)
+else
+    CANONICAL_PATH=$(cd "$TEMPLATE_PATH" && pwd -P 2>/dev/null)
+fi
+
+if [[ -z "$CANONICAL_PATH" ]]; then
+    jq -n --arg path "$TEMPLATE_PATH" \
+        '{"error": "Failed to resolve canonical path", "path": $path, "exit_code": 4}'
+    exit 4
+fi
+
+# Security: Validate cd succeeds and we're in the expected directory
+if ! cd "$CANONICAL_PATH" 2>/dev/null; then
+    jq -n --arg path "$CANONICAL_PATH" \
+        '{"error": "Failed to change directory", "path": $path, "exit_code": 4}'
+    exit 4
+fi
+
+# Verify we're actually in a git repo after cd (defense in depth)
+if ! git rev-parse --git-dir &>/dev/null; then
+    jq -n --arg path "$CANONICAL_PATH" \
+        '{"error": "Not in a git repository after cd", "path": $path, "exit_code": 4}'
+    exit 4
+fi
 
 # Get current branch - handles detached HEAD state
 CURRENT_BRANCH=$(git branch --show-current)

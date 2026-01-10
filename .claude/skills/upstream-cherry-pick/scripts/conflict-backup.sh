@@ -16,6 +16,10 @@
 # Output: JSON with conflict details and backup location
 
 set -euo pipefail
+IFS=$'\n\t'
+
+# Error trap for debugging
+trap 'echo "Error in conflict-backup.sh at line $LINENO" >&2' ERR
 
 COMMIT_SHA="${1:-unknown}"
 COMMIT_MESSAGE="${2:-}"
@@ -52,13 +56,40 @@ BACKUP_FAILED=()
 while IFS= read -r file; do
     [[ -z "$file" ]] && continue
 
-    # Create parent directory in backup location
-    FILE_DIR=$(dirname "$file")
-    mkdir -p "$BACKUP_DIR/$FILE_DIR" 2>/dev/null || true
+    # Security: Validate file path doesn't contain traversal sequences
+    if [[ "$file" =~ \.\. ]]; then
+        jq -n --arg file "$file" \
+            '{"status": "error", "message": "Invalid file path contains traversal sequence", "file": $file, "exit_code": 3}' >&2
+        BACKUP_FAILED+=("$file")
+        continue
+    fi
 
-    # Copy file to backup (preserve symlinks if any)
+    # Security: Reject symlinks (prevent following malicious links to sensitive files)
+    if [[ -L "$file" ]]; then
+        jq -n --arg file "$file" \
+            '{"status": "warning", "message": "Skipping symlink", "file": $file}' >&2
+        BACKUP_FAILED+=("$file")
+        continue
+    fi
+
+    # Create parent directory in backup location
+    FILE_DIR=$(dirname -- "$file")
+    if ! mkdir -p -- "$BACKUP_DIR/$FILE_DIR" 2>/dev/null; then
+        BACKUP_FAILED+=("$file")
+        continue
+    fi
+
+    # Verify directory was created and isn't a symlink (prevent race condition attacks)
+    if [[ ! -d "$BACKUP_DIR/$FILE_DIR" ]] || [[ -L "$BACKUP_DIR/$FILE_DIR" ]]; then
+        jq -n --arg dir "$BACKUP_DIR/$FILE_DIR" \
+            '{"status": "error", "message": "Backup directory validation failed", "dir": $dir}' >&2
+        BACKUP_FAILED+=("$file")
+        continue
+    fi
+
+    # Copy file to backup (do NOT preserve symlinks, copy content)
     BACKED_UP="false"
-    if cp -P "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
+    if cp -- "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
         BACKED_UP="true"
         ((BACKUP_COUNT++))
     else
@@ -67,8 +98,8 @@ while IFS= read -r file; do
 
     # Find conflict line numbers (where <<<<<<< HEAD appears)
     # Handle binary files gracefully
-    if file "$file" | grep -q "text"; then
-        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
+    if file -- "$file" | grep -q "text"; then
+        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" -- "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
     else
         CONFLICT_LINES="binary_file"
     fi
@@ -83,10 +114,10 @@ while IFS= read -r file; do
     else
         # Check if incoming side deleted the file
         # (conflict markers present but file was deleted on one side)
-        if [[ "$CONFLICT_LINES" != "binary_file" ]] && grep -q "<<<<<<< HEAD" "$file" && grep -q ">>>>>>>" "$file"; then
+        if [[ "$CONFLICT_LINES" != "binary_file" ]] && grep -q "<<<<<<< HEAD" -- "$file" && grep -q ">>>>>>>" -- "$file"; then
             # Check the content between markers
-            HEAD_CONTENT=$(sed -n '/<<<<<<< HEAD/,/=======/p' "$file" 2>/dev/null | grep -v "<<<<<<< HEAD" | grep -v "=======" || true)
-            INCOMING_CONTENT=$(sed -n '/=======/,/>>>>>>>/p' "$file" 2>/dev/null | grep -v "=======" | grep -v ">>>>>>>" || true)
+            HEAD_CONTENT=$(sed -n '/<<<<<<< HEAD/,/=======/p' -- "$file" 2>/dev/null | grep -v "<<<<<<< HEAD" | grep -v "=======" || true)
+            INCOMING_CONTENT=$(sed -n '/=======/,/>>>>>>>/p' -- "$file" 2>/dev/null | grep -v "=======" | grep -v ">>>>>>>" || true)
 
             # Check for whitespace-only content (not truly empty)
             if [[ -z "$(echo "$HEAD_CONTENT" | tr -d '[:space:]')" ]]; then
