@@ -9,6 +9,10 @@
 # Usage: ./classify-commits.sh <remote/branch> [count]
 # Example: ./classify-commits.sh tmp-project/main 10
 #
+# Exit codes:
+#   0 - Success, commits classified and returned as JSON
+#   1 - Error (missing args, invalid input, branch not found, output too large)
+#
 # Output: JSON array with classification for each commit
 #
 # Classification rules:

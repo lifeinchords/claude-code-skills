@@ -433,21 +433,34 @@ git log --oneline -5
 ### Script Failures
 
 **preflight-check.sh failures**:
+- Exit code 0: Clean state, ready to proceed
 - Exit code 1 (dirty): Stash or commit changes, then retry
 - Exit code 2 (wrong branch): Checkout default branch, then retry
 - Exit code 3 (behind/diverged): Pull latest changes, then retry
 - Exit code 4 (invalid path): Verify template path is correct
 
 **classify-commits.sh failures**:
-- "Invalid branch name": Check for typos in branch name or special characters
-- "Remote branch not found": Run `git fetch tmp-project` first
-- "Count exceeds 100": Reduce commit count to ≤100
+- Exit code 1: Various errors including:
+  - No remote/branch provided: Check command syntax
+  - Invalid branch name: Only alphanumeric, /, -, _, . allowed
+  - Invalid count: Must be positive integer ≤100
+  - Remote branch not found: Run `git fetch tmp-project` first
+  - Output size exceeds 1MB: Reduce commit count or filter commits
 
 **check-deps.sh failures**:
-- "Missing git/gh/jq": Install the missing dependency manually or via brew
-- "Unsupported OS": Currently macOS only - manual install required for other OS
-- "brew not found": Install Homebrew first, then retry
-- "Failed to install <dep>": Check network connection and brew status
+- Exit code 0: All dependencies available
+- Exit code 1: Missing dependencies, user declined install
+- Exit code 2: Installation failed - check network and brew status
+- Exit code 3: Unsupported OS (currently macOS only)
+- Common issues:
+  - "brew not found": Install Homebrew first, then retry
+  - "Missing git/gh/jq": Install manually or approve brew install
+
+**conflict-backup.sh failures**:
+- Exit code 0: Conflicts found and backed up successfully
+- Exit code 1: No conflicts detected (not an error)
+- Exit code 2: Not in a git repository
+- Exit code 3: Backup creation failed - check disk space and permissions
 
 
 ## Rigor
