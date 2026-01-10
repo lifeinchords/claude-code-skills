@@ -26,13 +26,21 @@ Claude can cherry-pick well without a skill, so why use this? The value is **con
 
 - Domain knowledge (what's "process engineering" vs project-specific)
 - Consistent + reliable safety gates (operator review, no auto-resolving conflicts)
-- External helper scripts (`preflight-check.sh`, `list-commits.sh`) handle deterministic operations (repo state validation, commit listing). Claude applies judgment from EXAMPLES.md to classify commits.
+- External helper scripts ([`preflight-check.sh`](/.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh), [`list-commits.sh`](/.claude/skills/upstream-cherry-pick/scripts/list-commits.sh)) handle deterministic operations (repo state validation, commit listing). Claude applies judgment from [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md) to classify commits. This saves lots of precious tokens that don't need to be in the invoking chat's context window.
 
 ## How this skill determines what to cherry-pick
 
 Claude uses its judgment to identify and extract reusable **agentic engineering patterns** (anything related to agents, skills, hooks, agentic-focused docs, MCP configs, AI workflow scripts ), while ignoring feature code and project-specific changes. See full classification details in [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md). 
 
 This skill focuses on Cursor and Claude Code tooling, but it should broadly recognize others too. If needed, add an example, ie: `Google Antigravity configs (~/.antigravity/)`
+
+
+**Classification flow overview:**
+1. [`list-commits.sh`](/.claude/skills/upstream-cherry-pick/scripts/list-commits.sh) → returns `{sha, message, files[]}`
+2. Claude reads output
+3. For each commit, Claude runs `git show <sha>`
+4. Claude applies [EXAMPLES.md](/.claude/skills/upstream-cherry-pick/EXAMPLES.md) patterns to CONTENT (not just paths)
+5. Claude classifies as YES/MAYBE/NO based on what code DOES
 
 ## Usage
 
@@ -56,13 +64,13 @@ This skill is currently **macOS only**. Claude will check for its dependencies w
 
 ### Permissions & safety
 
-Read-only git operations defined in [SKILL.md's `allowed-tools`](/.claude/skills/upstream-cherry-pick/SKILL.md:6) let Claude bypass confirmation prompts.
+Read-only git operations defined in [SKILL.md's `allowed-tools`](/.claude/skills/upstream-cherry-pick/SKILL.md) let Claude bypass confirmation prompts.
 
 This skill, however, is designed to **always prompt for confirmation when running commands that modify state** (ie, `git cherry-pick`, `git stash`, `git push`, `git add`).
 
-To relax these guardrails, you'll need to align 2 things:
-- update the `allowed-tools` 
-- remove or rephrase safety gate instructions like "Do NOT auto-resolve conflicts" in [SKILL.md:338](/.claude/skills/upstream-cherry-pick/SKILL.md#L338)
+To relax these guardrails, you'll need to modify and align 2 things:
+- update the `allowed-tools` with commands you are ok with Claude Code executing on its own
+- remove or rephrase safety gate instructions like "Do NOT auto-resolve conflicts" in [SKILL.md's conflict handling section](/.claude/skills/upstream-cherry-pick/SKILL.md#step-5-handle-conflicts-operator-required)
 
 If Claude runs into conflicing instructions, it will follow the more restrictive path.
 
@@ -144,7 +152,7 @@ Claude responds:
 
 **But how did it know *now* is a good time to prompt you about this skill?** 
 
-The **metadata** for all the skills defined in your project's persists in every Claude Code session. It recognized the opportunity because it connects the dots via the criteria we described in [this skill's `description`](/.claude/skills/upstream-cherry-pick/SKILL.md:3):
+The **metadata** for all the skills defined in your project's persists in every Claude Code session. It recognized the opportunity because it connects the dots via the criteria we described in [this skill's `description`](/.claude/skills/upstream-cherry-pick/SKILL.md):
 
   > Cherry-pick agentic patterns from project repos to upstream templates. WHEN TO PROPOSE: (1) After pushing commits touching high-signal paths, (2) Sprint/milestone review, (3) When agentic tooling is created. Classify commits as: YES (portable), MAYBE (needs changes/judgment—offer to fix), or NO (project-specific). YES examples: .claude/ (agents, skills, hooks, prompts), .cursor/rules/, MCP configs, docs/process/, CLAUDE.md, workflow scripts. NOT FOR: feature code, business logic, PRDs, project configs, env files. For MAYBE commits: present with "Offer:" describing what needs fixing
 
@@ -154,7 +162,7 @@ You respond:
 oh, good idea, ok.. let's only check this week's commits
 ```
 
-The skill [defaults to the last 10 commits](.claude/skills/upstream-cherry-pick/SKILL.md#invocation), but Claude adapts to your request, understanding you made 6 commits to `typescript-frontend` this week. 
+The skill defaults to scanning the last 10 commits ([`list-commits.sh`](/.claude/skills/upstream-cherry-pick/scripts/list-commits.sh) defaults `count=10`), but Claude adapts to your request, understanding this week you made 6 commits to `typescript-frontend`. 
 
 It invokes this skill and presents recommendations in 3 buckets:
 
@@ -206,7 +214,7 @@ proceed with all the YESes
 
 **Option 2: Fix a MAYBE commit first, then cherry-pick**
 ```sh
-let's fix the MAYBE e5c1a08 now
+let's fix the e5c1a08 MAYBE now
 ```
 
 Claude will then:
@@ -285,7 +293,7 @@ Claude completes the process, resulting with:
   > modified: tsconfig.json
   ```
 
-- in the `typescript-frontend` project, the `upstream` remote (pointing to `shared-agentic-template`) is flipped back to `push-disabled` so you can't accidentally push project code to the template.
+- in the `typescript-frontend` project, the `upstream` remote (pointing to `shared-agentic-template`) is flipped back to `push-disabled` so you can't accidentally push project code to the template later.
 
 
 You can now share these improvements downstream on any derived project:
