@@ -47,11 +47,11 @@ This skill includes executable scripts in `scripts/` that handle deterministic o
 # Exit codes: 0=clean, 1=uncommitted changes, 2=wrong branch, 3=behind remote, 4=invalid path
 ```
 
-**classify-commits.sh** - Analyzes commits and classifies as generic vs project-specific
+**classify-commits.sh** - Analyzes commits and classifies as YES/MAYBE/NO
 ```bash
 ./scripts/classify-commits.sh <remote/branch> [count]
 # Returns JSON array with classification for each commit
-# Classifications: generic, project_specific, needs_review
+# Classifications: YES, MAYBE, NO
 ```
 
 **conflict-backup.sh** - Detects conflicts, creates backups, outputs structured analysis
@@ -179,7 +179,7 @@ git remote add tmp-project https://github.com/<org>/<project-repo>.git
 git fetch tmp-project
 ```
 
-### Step 2: Identify generic commits
+### Step 2: Classify commits
 
 Run the classification script to analyze commits:
 
@@ -188,13 +188,13 @@ Run the classification script to analyze commits:
 ```
 
 The script returns JSON with each commit classified as:
-- **generic**: Cherry-pickable (agents, skills, process docs, tools)
-- **needs_review**: Claude uses judgment based on file contents
-- **project_specific**: Skip (feature code, configs, PRDs)
+- **YES**: Cherry-pickable (agents, skills, process docs, tools)
+- **MAYBE**: Claude uses judgment based on file contents
+- **NO**: Skip (feature code, configs, PRDs)
 
-For commits marked `needs_review`, inspect manually and determine if they are:
+For commits marked `MAYBE`, inspect manually and determine if they are:
 - **refinable**: Contains useful tooling but has hardcoded project-specific elements (paths, URLs, project names). Offer to pause cherry-picking, generalize the code, then resume.
-- **maybe**: Needs operator judgment on tool/workflow assumptions
+- **needs judgment**: Needs operator decision on tool/workflow assumptions
 - **skip**: Fundamentally project-specific, no modification helps
 
 ```bash
@@ -484,7 +484,7 @@ A: Can skip backup creation for simple cherry-picks
 - [ ] On default branch in template
 - [ ] Pulled latest from origin
 - [ ] Temporary remote added
-- [ ] Commits classified as generic vs project-specific
+- [ ] Commits classified as YES/MAYBE/NO
 - [ ] Operator reviewed and approved commit list
 - [ ] Cherry-pick completed without errors
 - [ ] Conflicts backed up and resolved (if any)

@@ -15,8 +15,8 @@
 #
 # Output: JSON array with classification for each commit
 #
-# Classification rules:
-#   GENERIC patterns (cherry-pickable agentic dev tooling and processes):
+# Classification rules (outputs YES/MAYBE/NO to match docs):
+#   YES patterns (cherry-pickable agentic dev tooling and processes):
 #     - .claude/agents/*, .claude/skills/*, .claude/hooks/*, .claude/prompts/*
 #     - .cursor/rules/* (AI rules, NOT general IDE settings)
 #     - .mcp.json, .cursor/mcp.json (MCP server configs)
@@ -25,7 +25,7 @@
 #     - CLAUDE.md
 #     - Commit message starts with [process]
 #
-#   PROJECT-SPECIFIC patterns (auto-skip):
+#   NO patterns (auto-skip):
 #     - *.workspace files
 #     - docs/prd/*
 #     - src/*, app/*, pages/* (feature code)
@@ -33,10 +33,10 @@
 #     - IDE editor preferences (.vscode/settings.json, .idea/)
 #     - Commit message starts with [projectname]
 #
-#   NEEDS REVIEW (Claude inspects diff):
-#     - package.json: SKIP if changing project name/config, but KEEP if adding
+#   MAYBE (Claude inspects diff):
+#     - package.json: NO if changing project name/config, but YES if adding
 #       agentic packages like @anthropic-ai/claude-code, @modelcontextprotocol/*
-#     - Mixed commits touching both generic and project-specific paths
+#     - Mixed commits touching both YES and NO paths
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -130,8 +130,9 @@ while IFS= read -r line; do
     FILES="${FILES%|}"  # Remove trailing pipe
 
     # Security: Limit files per commit to prevent resource exhaustion
-    FILE_COUNT=$(echo "$FILES" | grep -o '|' | wc -l)
-    ((FILE_COUNT++))  # Account for last file without trailing pipe
+    # Count pipes to determine file count (files are pipe-separated)
+    PIPE_COUNT=$(echo "$FILES" | tr -cd '|' | wc -c | tr -d ' ')
+    FILE_COUNT=$((PIPE_COUNT + 1))
     MAX_FILES_PER_COMMIT=500
 
     if [[ $FILE_COUNT -gt $MAX_FILES_PER_COMMIT ]]; then
@@ -141,7 +142,7 @@ while IFS= read -r line; do
             --argjson file_count "$FILE_COUNT" \
             --argjson max_files "$MAX_FILES_PER_COMMIT" \
             '{"error": "Commit exceeds maximum file count", "sha": $sha, "message": $message, "file_count": $file_count, "max_files": $max_files}' >&2
-        CLASSIFICATION="needs_review"
+        CLASSIFICATION="MAYBE"
         REASON="too_many_files"
         FILES="[${FILE_COUNT} files - truncated for safety]"
     fi
@@ -152,11 +153,11 @@ while IFS= read -r line; do
 
     # Check commit message prefix first
     if [[ "$MESSAGE" =~ ^\[process\] ]]; then
-        CLASSIFICATION="generic"
+        CLASSIFICATION="YES"
         REASON="commit_message_prefix"
     elif [[ "$MESSAGE" =~ ^\[[a-zA-Z0-9_-]+\] ]] && [[ ! "$MESSAGE" =~ ^\[process\] ]]; then
         # Has a prefix that's not [process] - likely project-specific
-        CLASSIFICATION="project_specific"
+        CLASSIFICATION="NO"
         REASON="commit_message_prefix"
     else
         # Analyze files
@@ -170,7 +171,7 @@ while IFS= read -r line; do
             # Check generic patterns
             for pattern in "${GENERIC_PATTERNS[@]}"; do
                 if [[ "$file" =~ $pattern ]]; then
-                    ((GENERIC_COUNT++))
+                    ((GENERIC_COUNT++)) || true
                     break
                 fi
             done
@@ -178,20 +179,20 @@ while IFS= read -r line; do
             # Check project patterns
             for pattern in "${PROJECT_PATTERNS[@]}"; do
                 if [[ "$file" =~ $pattern ]]; then
-                    ((PROJECT_COUNT++))
+                    ((PROJECT_COUNT++)) || true
                     break
                 fi
             done
         done
 
         if [[ $GENERIC_COUNT -gt 0 && $PROJECT_COUNT -eq 0 ]]; then
-            CLASSIFICATION="generic"
+            CLASSIFICATION="YES"
             REASON="file_paths"
         elif [[ $PROJECT_COUNT -gt 0 ]]; then
-            CLASSIFICATION="project_specific"
+            CLASSIFICATION="NO"
             REASON="file_paths"
         else
-            CLASSIFICATION="needs_review"
+            CLASSIFICATION="MAYBE"
             REASON="unclear_classification"
         fi
     fi
