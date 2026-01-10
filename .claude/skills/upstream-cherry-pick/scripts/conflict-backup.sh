@@ -72,9 +72,25 @@ while IFS= read -r file; do
         continue
     fi
 
+    # Security: Reject absolute paths (defense-in-depth; git paths should be relative)
+    if [[ "$file" == /* ]]; then
+        jq -n --arg file "$file" \
+            '{"status": "error", "message": "Invalid file path is absolute", "file": $file, "exit_code": 3}' >&2
+        BACKUP_FAILED+=("$file")
+        continue
+    fi
+
+    # Some BSD/macOS tools don't support GNU-style `--`.
+    # Also guard against filenames starting with '-' (option injection).
+    SRC="$file"
+    if [[ "$SRC" == -* ]]; then
+        SRC="./$SRC"
+    fi
+
     # Create parent directory in backup location
-    FILE_DIR=$(dirname -- "$file")
-    if ! mkdir -p -- "$BACKUP_DIR/$FILE_DIR" 2>/dev/null; then
+    FILE_DIR=$(dirname "$SRC")
+    FILE_DIR="${FILE_DIR#./}"
+    if ! mkdir -p "$BACKUP_DIR/$FILE_DIR" 2>/dev/null; then
         BACKUP_FAILED+=("$file")
         continue
     fi
@@ -90,7 +106,7 @@ while IFS= read -r file; do
     # Copy file to backup (do NOT preserve symlinks, copy content)
     BACKED_UP="false"
     CHECKSUM=""
-    if cp -- "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
+    if cp -p "$SRC" "$BACKUP_DIR/$file" 2>/dev/null; then
         BACKED_UP="true"
         ((BACKUP_COUNT++))
 
@@ -117,7 +133,7 @@ while IFS= read -r file; do
 
     # If git doesn't have the file, fall back to file command
     if [[ "$IS_BINARY" == "false" ]] && ! git ls-files --error-unmatch -- "$file" &>/dev/null; then
-        if ! file -- "$file" 2>/dev/null | grep -qi "text\|ascii\|utf"; then
+        if ! file "$file" 2>/dev/null | grep -Eqi 'text|ascii|utf'; then
             IS_BINARY=true
         fi
     fi
@@ -125,7 +141,7 @@ while IFS= read -r file; do
     if [[ "$IS_BINARY" == "true" ]]; then
         CONFLICT_LINES="binary_file"
     else
-        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" -- "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
+        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
         [[ -z "$CONFLICT_LINES" ]] && CONFLICT_LINES="unknown"
     fi
 
@@ -138,10 +154,10 @@ while IFS= read -r file; do
     else
         # Check if incoming side deleted the file
         # (conflict markers present but file was deleted on one side)
-        if [[ "$CONFLICT_LINES" != "binary_file" ]] && grep -q "<<<<<<< HEAD" -- "$file" && grep -q ">>>>>>>" -- "$file"; then
+        if [[ "$CONFLICT_LINES" != "binary_file" ]] && grep -q "<<<<<<< HEAD" "$file" && grep -q ">>>>>>>" "$file"; then
             # Check the content between markers
-            HEAD_CONTENT=$(sed -n '/<<<<<<< HEAD/,/=======/p' -- "$file" 2>/dev/null | grep -v "<<<<<<< HEAD" | grep -v "=======" || true)
-            INCOMING_CONTENT=$(sed -n '/=======/,/>>>>>>>/p' -- "$file" 2>/dev/null | grep -v "=======" | grep -v ">>>>>>>" || true)
+            HEAD_CONTENT=$(sed -n '/<<<<<<< HEAD/,/=======/p' "$file" 2>/dev/null | grep -v "<<<<<<< HEAD" | grep -v "=======" || true)
+            INCOMING_CONTENT=$(sed -n '/=======/,/>>>>>>>/p' "$file" 2>/dev/null | grep -v "=======" | grep -v ">>>>>>>" || true)
 
             # Check for whitespace-only content (not truly empty)
             if [[ -z "$(echo "$HEAD_CONTENT" | tr -d '[:space:]')" ]]; then

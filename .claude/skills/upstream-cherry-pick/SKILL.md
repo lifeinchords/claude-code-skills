@@ -47,11 +47,13 @@ This skill includes executable scripts in `scripts/` that handle deterministic o
 # Exit codes: 0=clean, 1=uncommitted changes, 2=wrong branch, 3=behind remote, 4=invalid path
 ```
 
-**classify-commits.sh** - Analyzes commits and classifies as YES/MAYBE/NO
+Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** run `git fetch` or `git pull`. If remote sync status can't be verified from existing `origin/<default>` refs, it will warn and ask the operator to fetch/pull explicitly.
+
+**list-commits.sh** - Lists commits with metadata (Claude does classification)
 ```bash
-./scripts/classify-commits.sh <remote/branch> [count]
-# Returns JSON array with classification for each commit
-# Classifications: YES, MAYBE, NO
+./scripts/list-commits.sh <remote/branch> [count]
+# Returns JSON array with: sha, message, files[]
+# NO classification - Claude inspects diffs and applies EXAMPLES.md guidance
 ```
 
 **conflict-backup.sh** - Detects conflicts, creates backups, outputs structured analysis
@@ -179,29 +181,32 @@ git remote add tmp-project https://github.com/<org>/<project-repo>.git
 git fetch tmp-project
 ```
 
-### Step 2: Classify commits
+### Step 2: List and classify commits
 
-Run the classification script to analyze commits:
-
-```bash
-./scripts/classify-commits.sh tmp-project/<branch> <N>
-```
-
-The script returns JSON with each commit classified as:
-- **YES**: Cherry-pickable (agents, skills, process docs, tools)
-- **MAYBE**: Claude uses judgment based on file contents
-- **NO**: Skip (feature code, configs, PRDs)
-
-For commits marked `MAYBE`, inspect manually and determine if they are:
-- **refinable**: Contains useful tooling but has hardcoded project-specific elements (paths, URLs, project names). Offer to pause cherry-picking, generalize the code, then resume.
-- **needs judgment**: Needs operator decision on tool/workflow assumptions
-- **skip**: Fundamentally project-specific, no modification helps
+Run the list script to get commit metadata:
 
 ```bash
-git show --stat --oneline <sha>
+./scripts/list-commits.sh tmp-project/<branch> <N>
 ```
 
-Apply judgment: Does this commit contain reusable process improvements or project-specific code?
+The script returns JSON with sha, message, and files for each commit. **Classification is done by Claude, not the script.**
+
+For each commit, inspect the diff to classify:
+
+```bash
+git show <sha>
+```
+
+Apply **EXAMPLES.md** guidance to determine classification:
+
+- **YES**: Cherry-pickable as-is (agents, skills, hooks, MCP configs, process docs)
+- **MAYBE**: Needs changes or judgment (hardcoded paths, tool assumptions, mixed content)
+- **NO**: Project-specific (feature code, PRDs, env files)
+
+For MAYBE commits, determine the subtype:
+- **refinable**: Has hardcoded paths/URLs/project names. Offer to parameterize.
+- **needs judgment**: Tool or workflow assumptions. Ask operator.
+- **skip**: Fundamentally project-specific, no modification helps.
 
 ### Step 3: Operator review (REQUIRED)
 
@@ -439,13 +444,13 @@ git log --oneline -5
 - Exit code 3 (behind/diverged): Pull latest changes, then retry
 - Exit code 4 (invalid path): Verify template path is correct
 
-**classify-commits.sh failures**:
+**list-commits.sh failures**:
 - Exit code 1: Various errors including:
   - No remote/branch provided: Check command syntax
   - Invalid branch name: Only alphanumeric, /, -, _, . allowed
   - Invalid count: Must be positive integer ≤100
   - Remote branch not found: Run `git fetch tmp-project` first
-  - Output size exceeds 1MB: Reduce commit count or filter commits
+  - Output size exceeds 512KB: Reduce commit count
 
 **check-deps.sh failures**:
 - Exit code 0: All dependencies available

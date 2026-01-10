@@ -36,7 +36,7 @@ json_escape() {
         char="${input:$i:1}"
         case "$char" in
             '"')  output+='\"' ;;
-            '\')  output='\\' ;;
+            '\\') output+='\\\\' ;;
             $'\n') output+='\n' ;;
             $'\r') output+='\r' ;;
             $'\t') output+='\t' ;;

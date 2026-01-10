@@ -31,7 +31,9 @@ if [[ -z "$TEMPLATE_PATH" ]]; then
 fi
 
 # Security: Validate path doesn't contain dangerous characters or sequences
-if [[ "$TEMPLATE_PATH" =~ [;\|\&\$\`] ]]; then
+# NOTE: Avoid [[ =~ ]] here because certain chars (notably backticks) can trigger
+# parse errors in bash when used in an unquoted regex.
+if [[ "$TEMPLATE_PATH" == *';'* || "$TEMPLATE_PATH" == *'|'* || "$TEMPLATE_PATH" == *'&'* || "$TEMPLATE_PATH" == *'$'* || "$TEMPLATE_PATH" == *'`'* ]]; then
     jq -n --arg path "$TEMPLATE_PATH" \
         '{"error": "Invalid path contains dangerous characters", "path": $path, "exit_code": 4}'
     exit 4
@@ -118,7 +120,14 @@ if [[ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]]; then
     exit 2
 fi
 
-# Check if behind remote
+# Check if behind remote (non-mutating)
+# IMPORTANT: Do NOT run `git fetch` here. Fetching updates remote-tracking refs and
+# modifies repo state. This skill should avoid changing state without explicit
+# operator confirmation.
+#
+# We only compare against the current local `origin/<default>` ref if it exists.
+# If the ref is missing/stale, we warn and let the operator decide to fetch/pull.
+#
 # First verify that 'origin' remote exists
 if ! git remote | grep -q "^origin$"; then
     jq -n \
@@ -129,27 +138,16 @@ if ! git remote | grep -q "^origin$"; then
     exit 0
 fi
 
-# Fetch from origin - do NOT hide errors as they indicate real problems
-# (network issues, authentication failures, etc.)
-if ! git fetch origin "$DEFAULT_BRANCH" --quiet 2>&1; then
-    jq -n \
-        --arg error "Failed to fetch from origin - check network and authentication" \
-        --arg current_branch "$CURRENT_BRANCH" \
-        --arg default_branch "$DEFAULT_BRANCH" \
-        '{status: "fetch_failed", error: $error, current_branch: $current_branch, default_branch: $default_branch, exit_code: 3}'
-    exit 3
-fi
-
 LOCAL=$(git rev-parse HEAD)
 
-# Check if remote branch exists after fetch
+# Check if remote-tracking branch exists locally
 if ! git rev-parse --verify "origin/$DEFAULT_BRANCH" &>/dev/null; then
     jq -n \
-        --arg error "Remote branch origin/$DEFAULT_BRANCH does not exist" \
+        --arg warning "Missing local ref origin/$DEFAULT_BRANCH (no fetch performed). Run: git fetch origin $DEFAULT_BRANCH" \
         --arg current_branch "$CURRENT_BRANCH" \
         --arg default_branch "$DEFAULT_BRANCH" \
-        '{status: "no_remote_branch", error: $error, current_branch: $current_branch, default_branch: $default_branch, exit_code: 3}'
-    exit 3
+        '{status: "clean", warning: $warning, current_branch: $current_branch, default_branch: $default_branch, exit_code: 0}'
+    exit 0
 fi
 
 REMOTE=$(git rev-parse "origin/$DEFAULT_BRANCH")

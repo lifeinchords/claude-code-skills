@@ -26,7 +26,7 @@ Claude can cherry-pick well without a skill, so why use this? The value is **con
 
 - Domain knowledge (what's "process engineering" vs project-specific)
 - Consistent + reliable safety gates (operator review, no auto-resolving conflicts)
-- External helper scripts: (`preflight-check.sh`, `classify-commits.sh`) handle mechanical, deterministic operations. This saves lots of precious tokens that don't need to be in the invoking chat's context window.
+- External helper scripts (`preflight-check.sh`, `list-commits.sh`) handle deterministic operations (repo state validation, commit listing). Claude applies judgment from EXAMPLES.md to classify commits.
 
 ## How this skill determines what to cherry-pick
 
