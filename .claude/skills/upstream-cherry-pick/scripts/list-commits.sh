@@ -28,6 +28,9 @@ IFS=$'\n\t'
 
 trap 'echo "Error in list-commits.sh at line $LINENO" >&2' ERR
 
+# Check jq dependency before emitting any output
+command -v jq &>/dev/null || { echo '{"error": "jq not installed"}'; exit 1; }
+
 REMOTE_BRANCH="${1:-}"
 COUNT="${2:-10}"
 
@@ -58,7 +61,7 @@ if [[ "$COUNT" -gt 100 ]]; then
 fi
 
 # Verify the remote branch exists
-if ! git rev-parse --verify "$REMOTE_BRANCH" &>/dev/null; then
+if ! git rev-parse --verify "$REMOTE_BRANCH^{commit}" &>/dev/null; then
     jq -n --arg branch "$REMOTE_BRANCH" \
         '{"error": "Remote branch not found. Run git fetch first.", "branch": $branch}'
     exit 1

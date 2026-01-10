@@ -7,12 +7,26 @@ allowed-tools:
   - Read
   - Grep
   - Glob
+  - Bash(./scripts/check-deps.sh:*)
+  - Bash(./scripts/preflight-check.sh:*)
+  - Bash(./scripts/list-commits.sh:*)
+  - Bash(./scripts/detect-mode.sh:*)
+  - Bash(./scripts/conflict-backup.sh:*)
+  - Bash(./.claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)
+  - Bash(./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)
+  - Bash(./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)
+  - Bash(./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)
+  - Bash(./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)
   - Bash(git status:*)
   - Bash(git log:*)
   - Bash(git diff:*)
+  - Bash(git diff-tree:*)
   - Bash(git show:*)
   - Bash(git branch --list:*)
   - Bash(git branch --show-current:*)
+  - Bash(git show-ref:*)
+  - Bash(git rev-list:*)
+  - Bash(git remote:*)
   - Bash(git remote -v:*)
   - Bash(git rev-parse:*)
   - Bash(git ls-files:*)
@@ -35,6 +49,8 @@ This skill requires:
 - `git` - Version control system for cherry-picking operations
 - `bash` - Shell for running scripts (currently supports bash; future: fish, zsh)
 - `brew` - macOS package manager for installing dependencies
+- Standard Unix utilities (typically preinstalled): `grep`, `sed`, `awk`, `cut`, `tr`, `wc`, `head`, `dirname`, `date`, `cp`, `mkdir`, `file`
+- Checksum utility for backups: `shasum` (macOS) or `sha256sum` (Linux)
 
 ## Scripts
 
@@ -61,6 +77,14 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 ./scripts/conflict-backup.sh [commit-sha] [commit-message]
 # Returns JSON with conflict details: files, line numbers, types, backup location
 # Exit codes: 0=conflicts backed up, 1=no conflicts, 2=not a repo, 3=backup failed
+```
+
+**detect-mode.sh** - Suggests cherry-pick vs squash based on commit patterns
+```bash
+./scripts/detect-mode.sh <remote/branch> [count]
+# Returns JSON with: suggested_mode, reason, common_prefix, files[]
+# If all commits share a path prefix → suggests squash
+# If commits touch scattered paths → suggests cherry-pick
 ```
 
 Claude interprets script output and handles edge cases requiring judgment.
@@ -101,7 +125,7 @@ Use this value for the git log command in Step 2.
 
 ## Prerequisites
 
-A: **Dependencies**: `git`, `gh` (GitHub CLI), and `jq` must be installed. Run `./scripts/check-deps.sh` to verify and install if needed. Currently macOS only.
+A: **Dependencies**: `git`, `gh` (GitHub CLI), `jq`, and `brew` must be installed. Run `./scripts/check-deps.sh` to verify and install if needed. Currently macOS only.
 
 B: **Upstream template repo** exists locally (e.g., ~/dev-projects/shared-agentic-template)
 
@@ -133,9 +157,10 @@ Don't rely strictly on commit message prefixes like `[process]`. Use judgment ba
 - Feature code (`src/`, `app/`, `pages/`)
 - PRDs, project-specific docs
 - Environment files
-- IDE settings (`.vscode/settings.json`)
+- IDE editor prefs (`.vscode/settings.json` with font/theme only)
 
 **MAYBE** (needs changes or judgment):
+- `.cursor/settings.json` → Inspect: AI model config = YES, editor prefs = NO
 - Scripts with hardcoded paths → Offer to parameterize
 - Hooks that assume specific tools (biome, eslint) → Ask if template uses them
 - `package.json` changes → Inspect diff: agentic packages = YES, project name = NO
@@ -191,36 +216,40 @@ git fetch tmp-project
 
 Operator confirmation REQUIRED before each of: `git remote add …`, `git fetch …`
 
-### Step 2: List and classify commits
+### Step 2: List, classify, and detect mode
 
-Run the list script to get commit metadata:
-
+**2a. List commits:**
 ```bash
 ./scripts/list-commits.sh tmp-project/<branch> <N>
 ```
 
-The script returns JSON with sha, message, and files for each commit. **Classification is done by Claude, not the script.**
+**2b. Detect suggested mode:**
+```bash
+./scripts/detect-mode.sh tmp-project/<branch> <N>
+```
 
-For each commit, inspect the diff to classify:
+If `suggested_mode` is `squash` (all commits share a path prefix), present mode choice to operator.
 
+**2c. Classify each commit:**
+
+For each commit, inspect the diff:
 ```bash
 git show <sha>
 ```
 
 Apply **EXAMPLES.md** guidance to determine classification:
-
 - **YES**: Cherry-pickable as-is (agents, skills, hooks, MCP configs, process docs)
 - **MAYBE**: Needs changes or judgment (hardcoded paths, tool assumptions, mixed content)
 - **NO**: Project-specific (feature code, PRDs, env files)
 
-For MAYBE commits, determine the subtype:
+For MAYBE commits, determine subtype:
 - **refinable**: Has hardcoded paths/URLs/project names. Offer to parameterize.
 - **needs judgment**: Tool or workflow assumptions. Ask operator.
 - **skip**: Fundamentally project-specific, no modification helps.
 
 ### Step 3: Operator review (REQUIRED)
 
-Present identified commits to operator for approval using the YES/MAYBE/NO format:
+**3a. Present classification using EXACTLY this format:**
 
 ```
 CHERRY PICK RECOMMENDATION (oldest first):
@@ -239,25 +268,50 @@ MAYBE (needs changes or judgment):
 |---------|----------------------------------------|--------------------------|
 | <sha1>  | <message>                              | <what needs fixing>      |
 |         | -> <file1>                             | <action to take>         |
-| <sha2>  | <message>                              | <judgment question>      |
-|         | -> <file1>                             |                          |
 
 NO (project-specific):
 | SHA     | Message                        | Reason              |
 |---------|--------------------------------|---------------------|
 | <sha1>  | <message>                      | <reason>            |
 |         | -> <file1>                     |                     |
-|         | -> <file2>                     |                     |
-| <sha2>  | <message>                      | <reason>            |
-|         | -> <file1>                     |                     |
-
-Proceed? Operator can respond naturally:
-- "yes to all"
-- "for MAYBE <sha>, parameterize it first"
-- "skip the <description> or <sha>"
 ```
 
-Do NOT proceed until operator confirms which commits to cherry-pick.
+**3b. Present mode choice** (if squash was suggested):
+
+```
+MODE OPTIONS:
+
+Suggested: SQUASH (all commits share prefix: .claude/skills/...)
+
+A: Cherry-pick (preserve individual commit history)
+B: Squash (combine into single clean commit)
+
+Which mode?
+```
+
+**3c. If squash selected, present squash options:**
+
+```
+SQUASH OPTIONS:
+
+A: Squash locally (reset + commit before push)
+B: Let GitHub squash on merge (push commits, select "Squash and merge" in PR)
+
+Which squash style?
+```
+
+**3d. Present delivery choice:**
+
+```
+DELIVERY OPTIONS:
+
+A: Create PR (recommended - allows review before merge)
+B: Direct to branch (push directly to <default-branch>)
+
+Which delivery?
+```
+
+Do NOT proceed until operator confirms all choices.
 
 ### Handling MAYBE commits
 
@@ -270,20 +324,45 @@ If operator asks to fix a MAYBE commit before cherry-picking:
 5. **After approval**: Commit the fixed version
 6. **Resume cherry-picking**: Return to template repo and continue
 
-### Step 4: Cherry-pick commits
+### Step 4: Apply commits
 
+**4a. Create feature branch** (if PR delivery chosen):
 ```bash
-# Cherry-pick single commit
-git cherry-pick <sha>
-
-# Cherry-pick multiple commits (must be oldest to newest order)
-git cherry-pick <sha1> <sha2> <sha3>
-
-# Cherry-pick a range (start is exclusive, end is inclusive)
-git cherry-pick <start-sha>^..<end-sha>
+git checkout -b feature/<descriptive-name>
 ```
 
-Operator confirmation REQUIRED before running any `git cherry-pick …`
+**4b. Apply commits based on mode:**
+
+**Mode A: Cherry-pick (preserve history)**
+```bash
+# Cherry-pick multiple commits (oldest to newest)
+git cherry-pick <sha1> <sha2> <sha3>
+
+# Or cherry-pick a range
+git cherry-pick <first-sha>^..<last-sha>
+```
+
+**Mode B: Squash**
+
+Option B1 - Squash locally:
+```bash
+# Cherry-pick all commits first
+git cherry-pick <first-sha>^..<last-sha>
+
+# Then squash into one commit
+git reset --soft HEAD~<N>
+git commit -m "<Claude drafts descriptive message>"
+```
+
+Option B2 - Let GitHub squash:
+```bash
+# Cherry-pick all commits (history preserved on branch)
+git cherry-pick <first-sha>^..<last-sha>
+
+# Push branch, then select "Squash and merge" when merging PR
+```
+
+Operator confirmation REQUIRED before: `git cherry-pick …`, `git reset …`, `git commit …`
 
 ### Step 5: Handle conflicts (OPERATOR REQUIRED)
 
@@ -362,25 +441,43 @@ Conflict type categories:
 - DELETION: One side deleted, other modified
 - RENAME: File renamed/moved differently
 
-### Step 6: Push and cleanup
+### Step 6: Push and deliver
+
+**Delivery A: Create PR (recommended)**
+```bash
+# Push feature branch
+git push origin feature/<branch-name>
+
+# Create PR (Claude drafts title and body)
+gh pr create --title "<title>" --body "<description>"
+```
+
+If operator chose "Let GitHub squash", remind them to select **"Squash and merge"** when merging the PR.
+
+**Delivery B: Direct to branch**
+```bash
+# Push directly to default branch
+git push origin <default-branch>
+```
+
+Operator confirmation REQUIRED before: `git push …`, `gh pr create …`
+
+### Step 7: Cleanup
 
 ```bash
-# Push cherry-picked commits to template repo
-git push origin <default-branch>
-
-# Remove temporary remote (no longer needed)
+# Remove temporary remote
 git remote remove tmp-project
 
-# Verify remotes are back to normal
+# Verify remotes
 git remote -v
 
-# Restore stashed changes if any were stashed in pre-flight
+# Restore stashed changes if any
 git stash pop
 ```
 
-Operator confirmation REQUIRED before each of: `git push …`, `git remote remove …`, `git stash pop`
+Operator confirmation REQUIRED before: `git remote remove …`, `git stash pop`
 
-### Step 7: Return to project and secure upstream
+### Step 8: Return to project and secure upstream
 
 ```bash
 cd <project-repo>
@@ -467,6 +564,10 @@ git log --oneline -5
   - Invalid count: Must be positive integer ≤100
   - Remote branch not found: Run `git fetch tmp-project` first
   - Output size exceeds 512KB: Reduce commit count
+
+**detect-mode.sh failures**:
+- Exit code 1: Same errors as list-commits.sh (uses same validation)
+- Output includes `suggested_mode`: "squash" or "cherry-pick"
 
 **check-deps.sh failures**:
 - Exit code 0: All dependencies available

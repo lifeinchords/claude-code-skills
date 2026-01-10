@@ -60,7 +60,7 @@ You can run the skill at any time, but the magic is once it's set up, Claude Cod
 
 ### Prerequisites
 
-This skill is currently **macOS only**. Claude will check for its dependencies when invoked: [`git`](https://git-scm.com/install), [`jq`](https://github.com/jqlang/jq), [`brew`](https://brew.sh/) and [`gh`](https://cli.github.com/). If any are missing, you'll be prompted to let Claude install them. See [Dependencies](/.claude/skills/upstream-cherry-pick/SKILL.md#dependencies).
+This skill is designed for **macOS only**. Linux compatablity is likely but has not been tested. Claude will check for its dependencies when invoked: [`git`](https://git-scm.com/install), [`jq`](https://github.com/jqlang/jq), [`brew`](https://brew.sh/) and [`gh`](https://cli.github.com/). The helper scripts also rely on standard Unix utilities (typically preinstalled) like `grep`, `sed`, `awk`, and `file`, plus a checksum utility (`shasum`). If any required dependencies are missing, you'll be prompted to let Claude install them. See [Dependencies](/.claude/skills/upstream-cherry-pick/SKILL.md#dependencies).
 
 ### Permissions & safety
 
@@ -205,43 +205,95 @@ It invokes this skill and presents recommendations in 3 buckets:
 
 ```
 
-### Choose your adventure
+### Mode selection
 
-**Option 1: Cherry-pick all the proposed commits**
+If all commits share a common path (like a single skill being developed), Claude suggests **squash mode**:
+
 ```sh
-proceed with all the YESes
+> MODE OPTIONS:
+>
+> Suggested: SQUASH (all commits share prefix: .claude/skills/upstream-cherry-pick/)
+>
+> A: Cherry-pick (preserve individual commit history)
+> B: Squash (combine into single clean commit)
+>
+> Which mode?
 ```
 
-**Option 2: Fix a MAYBE commit first, then cherry-pick**
+If you choose **squash**, Claude asks how:
+
+```sh
+> SQUASH OPTIONS:
+>
+> A: Squash locally (combine commits before push)
+> B: Let GitHub squash (select "Squash and merge" in PR)
+>
+> Which squash style?
+```
+
+Then Claude asks about delivery:
+
+```sh
+> DELIVERY OPTIONS:
+>
+> A: Create PR (recommended - allows review before merge)
+> B: Direct to branch (push directly to dev)
+>
+> Which delivery?
+```
+
+### Choose your adventure
+
+**Option 1: Cherry-pick with PR**
+```sh
+cherry-pick, PR please
+```
+
+**Option 2: Squash locally, then PR**
+```sh
+squash locally, then PR
+```
+
+**Option 3: Squash via GitHub PR**
+```sh
+squash, let GitHub do it
+```
+
+**Option 4: Fix a MAYBE commit first**
 ```sh
 let's fix the e5c1a08 MAYBE now
 ```
 
-Claude will then:
-1. Pause the cherry-pick workflow
-2. Make the fix (in this case: replace `/Users/alex/dev-projects/typescript-frontend` with `$PROJECT`)
-3. Show you the diff and proposed commit message
-4. Wait for your approval before committing
-5. Resume cherry-picking after
+Claude will:
+1. Pause the workflow
+2. Make the fix (e.g., replace `/Users/alex/...` with `$PROJECT`)
+3. Show diff and proposed commit message
+4. Wait for approval before committing
+5. Resume after
 
-**Option 3: Skip MAYBE commits**
+**Option 5: Skip MAYBE commits**
 ```sh
-yes to all the YES commits and skip the MAYBE ones
+yes to all the YES commits, skip the MAYBEs
 ```
 
-**Option 4: Stop**
+**Option 6: Stop**
 ```sh
-actually, changed my mind. Let's go back to Trello stuff
+actually, let's stop.. I changed my mind lets just continue with Trello
 ```
 
 ### What Happens Next
 
-Say you go with Option 3, `Skip MAYBE commits`. Claude confirms which commits will be cherry-picked:
+Say you choose **Option 2: Squash locally, then PR**. Claude confirms:
+
 ```sh
-> Ok, I'll cherry-pick a3f8c21 and 7b2e9d4
+> Mode: SQUASH (locally)
+> Delivery: PR
+> Commits: a3f8c21, 7b2e9d4
+>
+> Creating feature branch and applying...
 ```
 
-It does its pre-flight check on the upstream repo, finds a blocker and stops:
+It does the pre-flight check, and stops if it runs into a blocker:
 
 ```sh
 > Upstream repo has uncommitted changes:
@@ -251,9 +303,13 @@ It does its pre-flight check on the upstream repo, finds a blocker and stops:
 > Stash these changes before proceeding? [y/n]
 ```
 
-If you confirm, Claude stashes these files and begins applying the agreed-on commits chronologically. In this example, your oldest cherry-pickable commit is Wednesday's `a3f8c21`.
+After you confirm, Claude:
+1. Stashes the changes
+2. Creates feature branch: `git checkout -b feature/add-pr-orchestrator`
+3. Cherry-picks and squashes the commits
+4. Pushes and creates PR
 
-It then continues to the next commit. If Claude hit a merge conflict, it stops immediately, summarizes the issue and asks you what to do:
+If a merge conflict occurs during cherry-pick:
 
 ```sh
 > MERGE CONFLICT DETECTED
@@ -283,26 +339,30 @@ ok, I fixed the issue on my end. we're good to go.. complete the rest
 
 ### Outcome
 
-Claude completes the process, resulting with:
+Claude completes the process:
 
-- the upstream `shared-agentic-template` repo now has commits `a3f8c21` and `7b2e9d4` from the downstream `typescript-frontend` project repo
+```sh
+> PR created: https://github.com/org/shared-agentic-template/pull/42
+>
+> Title: Add PR orchestrator agent and commit splitting rule
+> Branch: feature/add-pr-orchestrator -> dev
+>
+> Cleanup complete:
+> - Temporary remote removed
+> - Stashed files restored
+> - Project upstream push disabled
+```
 
-- `~/dev-projects/shared-agentic-template` folder now has previously stashed files back in its working directory:
-  ```sh
-  > modified: docs/API.md
-  > modified: tsconfig.json
-  ```
+Results:
+- **PR ready for review** on `shared-agentic-template`
+- Template folder has stashed files restored
+- Project's `upstream` remote is push-disabled (prevents accidental pushes)
 
-- in the `typescript-frontend` project, the `upstream` remote (pointing to `shared-agentic-template`) is flipped back to `push-disabled` so you can't accidentally push project code to the template later.
-
-
-You can now share these improvements downstream on any derived project:
+After merging the PR, share improvements downstream:
 
 ```sh
 cd ~/dev-projects/python-backend
-
-# adds commits a3f8c21 and 7b2e9d4 to python-backend
-git pull upstream main
+git pull upstream dev
 ```
 
 ## Todo

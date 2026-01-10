@@ -92,8 +92,6 @@ for dep in "${MISSING_DEPS[@]}"; do
 done
 MISSING_JSON+="]"
 
-echo '{"status": "missing", "missing": '"$MISSING_JSON"', "message": "Some dependencies are not installed"}'
-
 # Check if brew is available
 if ! command -v brew &>/dev/null; then
     DEPS_LIST=$(json_escape "${MISSING_DEPS[*]}")
@@ -102,11 +100,11 @@ if ! command -v brew &>/dev/null; then
 fi
 
 # Prompt for installation
-echo ""
-echo "Missing dependencies: ${MISSING_DEPS[*]}"
-echo ""
-read -p "Install missing dependencies via brew? [y/N] " -n 1 -r
-echo ""
+echo '{"status": "missing", "missing": '"$MISSING_JSON"', "message": "Some dependencies are not installed"}' >&2
+printf '\nMissing dependencies: %s\n\n' "${MISSING_DEPS[*]}" >&2
+printf 'Install missing dependencies via brew? [y/N] ' >&2
+read -r -n 1 REPLY
+printf '\n' >&2
 
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo '{"status": "declined", "message": "User declined installation", "missing": '"$MISSING_JSON"'}'
@@ -114,9 +112,9 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # Install missing deps
-echo "Installing: ${MISSING_DEPS[*]}..."
+printf 'Installing: %s...\n' "${MISSING_DEPS[*]}" >&2
 for dep in "${MISSING_DEPS[@]}"; do
-    echo "  -> brew install $dep"
+    printf '  -> brew install %s\n' "$dep" >&2
     if ! brew install "$dep"; then
         # If jq was just installed, we can use it now; otherwise use json_escape
         if command -v jq &>/dev/null; then
@@ -132,7 +130,7 @@ for dep in "${MISSING_DEPS[@]}"; do
     fi
 done
 
-echo ""
+printf '\n' >&2
 # Now jq should be available after installation
 if command -v jq &>/dev/null; then
     jq -n --argjson installed "$MISSING_JSON" '{"status": "ok", "message": "Dependencies installed successfully", "installed": $installed}'

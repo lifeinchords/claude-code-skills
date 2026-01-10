@@ -24,6 +24,12 @@ trap 'echo "Error in preflight-check.sh at line $LINENO" >&2' ERR
 
 TEMPLATE_PATH="${1:-}"
 
+# Check jq dependency before attempting any jq output
+if ! command -v jq &>/dev/null; then
+    echo '{"error": "jq not installed", "exit_code": 4}'
+    exit 4
+fi
+
 # Use jq for all JSON output to ensure proper escaping
 if [[ -z "$TEMPLATE_PATH" ]]; then
     jq -n '{"error": "No template path provided", "exit_code": 4}'

@@ -24,6 +24,12 @@ trap 'echo "Error in conflict-backup.sh at line $LINENO" >&2' ERR
 COMMIT_SHA="${1:-unknown}"
 COMMIT_MESSAGE="${2:-}"
 
+# Check jq dependency before attempting any jq output
+if ! command -v jq &>/dev/null; then
+    echo '{"status": "error", "message": "jq not installed", "exit_code": 3}'
+    exit 3
+fi
+
 # Verify we're in a git repo
 if ! git rev-parse --git-dir &>/dev/null; then
     jq -n '{"status": "error", "message": "Not a git repository", "exit_code": 2}'
