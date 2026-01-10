@@ -114,6 +114,9 @@ NEEDS_REVIEW_NOTE="package.json, package-lock.json - check if adding agentic pac
 echo '['
 
 FIRST=true
+OUTPUT_SIZE=0
+MAX_OUTPUT_SIZE=$((1024 * 1024))  # 1MB limit
+
 while IFS= read -r line; do
     SHA=$(echo "$line" | cut -d' ' -f1)
     MESSAGE=$(echo "$line" | cut -d' ' -f2-)
@@ -122,9 +125,26 @@ while IFS= read -r line; do
     FILES=$(git diff-tree --no-commit-id --name-only -z -r "$SHA" 2>/dev/null | tr '\0' '|')
     FILES="${FILES%|}"  # Remove trailing pipe
 
+    # Security: Limit files per commit to prevent resource exhaustion
+    FILE_COUNT=$(echo "$FILES" | grep -o '|' | wc -l)
+    ((FILE_COUNT++))  # Account for last file without trailing pipe
+    MAX_FILES_PER_COMMIT=500
+
+    if [[ $FILE_COUNT -gt $MAX_FILES_PER_COMMIT ]]; then
+        jq -n \
+            --arg sha "$SHA" \
+            --arg message "$MESSAGE" \
+            --argjson file_count "$FILE_COUNT" \
+            --argjson max_files "$MAX_FILES_PER_COMMIT" \
+            '{"error": "Commit exceeds maximum file count", "sha": $sha, "message": $message, "file_count": $file_count, "max_files": $max_files}' >&2
+        CLASSIFICATION="needs_review"
+        REASON="too_many_files"
+        FILES="[${FILE_COUNT} files - truncated for safety]"
+    fi
+
     # Determine classification
-    CLASSIFICATION="unknown"
-    REASON=""
+    CLASSIFICATION="${CLASSIFICATION:-unknown}"
+    REASON="${REASON:-}"
 
     # Check commit message prefix first
     if [[ "$MESSAGE" =~ ^\[process\] ]]; then
@@ -181,14 +201,27 @@ while IFS= read -r line; do
     fi
 
     # Use jq to properly escape all values and construct JSON
-    jq -n \
+    JSON_OBJECT=$(jq -n \
         --arg sha "$SHA" \
         --arg message "$MESSAGE" \
         --arg classification "$CLASSIFICATION" \
         --arg reason "$REASON" \
         --arg files "$FILES" \
         '{sha: $sha, message: $message, classification: $classification, reason: $reason, files: $files}' | \
-    sed 's/^/  /' | sed '$ s/$/\n/' | tr -d '\n'
+    sed 's/^/  /' | sed '$ s/$/\n/' | tr -d '\n')
+
+    # Security: Check output size to prevent memory exhaustion
+    OBJECT_SIZE=${#JSON_OBJECT}
+    ((OUTPUT_SIZE += OBJECT_SIZE))
+
+    if [[ $OUTPUT_SIZE -gt $MAX_OUTPUT_SIZE ]]; then
+        echo ''
+        echo '  {"error": "Output size exceeds 1MB limit", "processed_commits": '"$(($(git log "$REMOTE_BRANCH" --oneline -"$COUNT" | wc -l) - 1))"'}'
+        echo ']'
+        exit 1
+    fi
+
+    echo "$JSON_OBJECT"
 
 done < <(git log "$REMOTE_BRANCH" --oneline -"$COUNT" --reverse)
 

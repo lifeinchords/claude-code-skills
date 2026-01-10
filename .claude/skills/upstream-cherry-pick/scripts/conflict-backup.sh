@@ -89,21 +89,45 @@ while IFS= read -r file; do
 
     # Copy file to backup (do NOT preserve symlinks, copy content)
     BACKED_UP="false"
+    CHECKSUM=""
     if cp -- "$file" "$BACKUP_DIR/$file" 2>/dev/null; then
         BACKED_UP="true"
         ((BACKUP_COUNT++))
+
+        # Integrity checking: Generate SHA256 checksum for verification
+        if command -v shasum &>/dev/null; then
+            CHECKSUM=$(shasum -a 256 "$BACKUP_DIR/$file" 2>/dev/null | cut -d' ' -f1 || echo "")
+        elif command -v sha256sum &>/dev/null; then
+            CHECKSUM=$(sha256sum "$BACKUP_DIR/$file" 2>/dev/null | cut -d' ' -f1 || echo "")
+        fi
+        [[ -z "$CHECKSUM" ]] && CHECKSUM="unavailable"
     else
         BACKUP_FAILED+=("$file")
+        CHECKSUM="not_backed_up"
     fi
 
     # Find conflict line numbers (where <<<<<<< HEAD appears)
-    # Handle binary files gracefully
-    if file -- "$file" | grep -q "text"; then
-        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" -- "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
-    else
-        CONFLICT_LINES="binary_file"
+    # Use git's built-in binary detection for accuracy
+    IS_BINARY=false
+
+    # Check if git considers this file binary
+    if git diff --numstat HEAD -- "$file" 2>/dev/null | grep -q "^-"; then
+        IS_BINARY=true
     fi
-    [[ -z "$CONFLICT_LINES" ]] && CONFLICT_LINES="unknown"
+
+    # If git doesn't have the file, fall back to file command
+    if [[ "$IS_BINARY" == "false" ]] && ! git ls-files --error-unmatch -- "$file" &>/dev/null; then
+        if ! file -- "$file" 2>/dev/null | grep -qi "text\|ascii\|utf"; then
+            IS_BINARY=true
+        fi
+    fi
+
+    if [[ "$IS_BINARY" == "true" ]]; then
+        CONFLICT_LINES="binary_file"
+    else
+        CONFLICT_LINES=$(grep -n "<<<<<<< HEAD" -- "$file" 2>/dev/null | cut -d: -f1 | tr '\n' ',' | sed 's/,$//' || echo "")
+        [[ -z "$CONFLICT_LINES" ]] && CONFLICT_LINES="unknown"
+    fi
 
     # Determine conflict type by analyzing the file
     CONFLICT_TYPE="MODIFICATION"  # default
@@ -135,7 +159,8 @@ while IFS= read -r file; do
         --arg lines "$CONFLICT_LINES" \
         --arg type "$CONFLICT_TYPE" \
         --argjson backed_up "$BACKED_UP" \
-        '$conflicts + [{file: $file, lines: $lines, type: $type, backed_up: $backed_up}]')
+        --arg checksum "$CHECKSUM" \
+        '$conflicts + [{file: $file, lines: $lines, type: $type, backed_up: $backed_up, checksum: $checksum}]')
 
 done <<< "$CONFLICTED_FILES"
 
