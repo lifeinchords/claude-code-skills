@@ -100,13 +100,13 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 Notes:
 - Enforces an output size cap and may return a partial result with an `"error"` object
 
-**conflict-backup.sh** - When a cherry-pick detects conflicts, backup and return a structured JSON report. Designed for safety: rejects suspicious paths, skips symlinks, and records checksums when possible.
+**conflict-backup.sh** - Detects conflicts (from cherry-pick OR git apply --3way), creates backups, returns structured JSON. Rejects suspicious paths, skips symlinks, records checksums.
 ```bash
 ./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh [commit-sha] [commit-message]
-# Returns JSON with conflict details: files, line numbers, types, backup location
+# Returns JSON with: conflict_source (merge|patch), files, line numbers, types, backup location
 
 # Exit codes:
-# 0=conflicts found, creates temp/merge-backups/YYYY-MM-DD/, structured JSON report returned
+# 0=conflicts found, creates temp/merge-backups/YYYY-MM-DD/
 # 1=no conflicts detected (not an error)
 # 2=not in a git repository
 # 3=backup failed or missing dependency (jq)
@@ -350,12 +350,14 @@ If operator asks to fix a MAYBE commit before cherry-picking:
   - Or apply a range: `git cherry-pick <first-sha>^..<last-sha>`
     - If `<first-sha>` is the repository root commit (no parent), `<first-sha>^` fails. Use explicit SHAs instead.
 - **If Mode = Squash (locally)**:
-  - `git cherry-pick <first-sha>^..<last-sha>`
-  - `git reset --soft HEAD~<N>`
-  - `git commit -m "<Claude drafts descriptive message>"`
+  - Generate patch of final state: `git diff <first-sha>^..<last-sha> > /tmp/cherry-pick-squash.patch`
+  - Apply with 3-way merge: `git apply --3way /tmp/cherry-pick-squash.patch`
+  - If conflicts, resolve once (only final state conflicts, not sequential)
+  - Stage and commit: `git add . && git commit -m "<Claude drafts descriptive message>"`
 - **If Mode = Squash (GitHub)**:
-  - `git cherry-pick <first-sha>^..<last-sha>`
-  - (Later: select **Squash and merge** in the PR UI)
+  - Same patch approach as local squash, but commit to feature branch
+  - Push feature branch, create PR
+  - (GitHub's "Squash and merge" option is redundant since already squashed, but harmless)
 
 ### Step 5: Handle conflicts (OPERATOR REQUIRED)
 
@@ -368,10 +370,10 @@ Run the conflict backup script to detect, backup, and analyze conflicts:
 ```
 
 The script returns JSON with:
+- `conflict_source`: "merge" (cherry-pick) or "patch" (git apply --3way)
 - All conflicted files with line numbers
 - Conflict type per file (ADDITION, MODIFICATION, DELETION)
 - Backup location (temp/merge-backups/YYYY-MM-DD/)
-- Backup success status per file
 
 If exit code is 1 (no conflicts), proceed to Step 6.
 

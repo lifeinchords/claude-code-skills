@@ -336,9 +336,9 @@ If a merge conflict occurs during cherry-pick:
 > Backups saved to: temp/merge-backups/2026-01-08/
 >
 > OPTIONS:
-> A: Resolve conflicts manually, then: git add . && git cherry-pick --continue
-> B: Skip this commit: git cherry-pick --abort
-> C: Abort all remaining cherry-picks
+> A: Resolve conflicts manually, then continue
+> B: Skip this file/commit
+> C: Abort entirely
 >
 > Waiting for your action...
 ```

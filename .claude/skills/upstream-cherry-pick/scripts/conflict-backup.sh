@@ -3,8 +3,11 @@
 # conflict-backup.sh
 # Detects merge conflicts, creates backups, and outputs structured analysis
 #
-# Platform: macOS only
-# TODO: Add Windows and Linux cross-environment compatibility
+# Supports two conflict detection modes:
+#   1. "merge" - Unmerged files from cherry-pick/merge (git diff --diff-filter=U)
+#   2. "patch" - Modified files with conflict markers from git apply --3way
+#
+# Platform: macOS (bash 3.2+). Linux may work but is untested.
 #
 # Usage: ./conflict-backup.sh [commit-sha] [commit-message]
 # Exit codes:
@@ -13,7 +16,7 @@
 #   2 - Not in a git repository
 #   3 - Backup creation failed
 #
-# Output: JSON with conflict details and backup location
+# Output: JSON with conflict details, backup location, and conflict_source field
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -36,8 +39,18 @@ if ! git rev-parse --git-dir &>/dev/null; then
     exit 2
 fi
 
-# Get conflicted files
+# Get conflicted files (unmerged state from cherry-pick/merge)
 CONFLICTED_FILES=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+CONFLICT_SOURCE="merge"
+
+# Fallback: check modified files for conflict markers (from git apply --3way)
+if [[ -z "$CONFLICTED_FILES" ]]; then
+    MODIFIED_FILES=$(git diff --name-only 2>/dev/null || true)
+    if [[ -n "$MODIFIED_FILES" ]]; then
+        CONFLICTED_FILES=$(echo "$MODIFIED_FILES" | xargs grep -l '<<<<<<<' 2>/dev/null || true)
+        [[ -n "$CONFLICTED_FILES" ]] && CONFLICT_SOURCE="patch"
+    fi
+fi
 
 if [[ -z "$CONFLICTED_FILES" ]]; then
     jq -n '{"status": "no_conflicts", "message": "No merge conflicts detected", "exit_code": 1}'
@@ -195,6 +208,7 @@ jq -n \
     --arg sha "$COMMIT_SHA" \
     --arg message "$COMMIT_MESSAGE" \
     --arg backup_dir "$BACKUP_DIR" \
+    --arg conflict_source "$CONFLICT_SOURCE" \
     --argjson conflict_count "$CONFLICT_COUNT" \
     --argjson backed_up_count "$BACKUP_COUNT" \
     --argjson conflicts "$CONFLICTS_JSON" \
@@ -204,6 +218,7 @@ jq -n \
         commit_sha: $sha,
         commit_message: $message,
         backup_dir: $backup_dir,
+        conflict_source: $conflict_source,
         conflict_count: $conflict_count,
         backed_up_count: $backed_up_count,
         conflicts: $conflicts,
