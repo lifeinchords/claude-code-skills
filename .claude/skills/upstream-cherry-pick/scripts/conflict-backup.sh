@@ -127,7 +127,7 @@ while IFS= read -r file; do
     CHECKSUM=""
     if cp -p "$SRC" "$BACKUP_DIR/$file" 2>/dev/null; then
         BACKED_UP="true"
-        ((BACKUP_COUNT++))
+        BACKUP_COUNT=$((BACKUP_COUNT + 1))
 
         # Integrity checking: Generate SHA256 checksum for verification
         if command -v shasum &>/dev/null; then
