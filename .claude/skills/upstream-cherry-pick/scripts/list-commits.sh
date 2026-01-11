@@ -12,7 +12,7 @@
 # inspects diffs as needed, and applies EXAMPLES.md guidance
 # to determine YES/MAYBE/NO for each commit.
 #
-# Platform: macOS (bash 3.2+), Linux
+# Platform: macOS (bash 3.2+). Linux may work but is untested.
 #
 # Usage: ./list-commits.sh <remote/branch> [count]
 # Example: ./list-commits.sh tmp-project/main 10
@@ -121,7 +121,7 @@ while IFS= read -r line; do
 
     echo "  $JSON_OBJECT"
 
-done < <(git log "$REMOTE_BRANCH" --oneline -"$COUNT" --reverse)
+done < <(git log -n "$COUNT" --reverse --oneline "$REMOTE_BRANCH" --)
 
 echo ''
 echo ']'

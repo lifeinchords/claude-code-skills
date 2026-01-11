@@ -9,11 +9,23 @@ Developers often maintain a template repo that gets cloned or forked to start ne
 This skill provides a harness for Claude Code to safely cherry-pick commits from an inherited project repo to its upstream template repo.
 
 ```mermaid
+---
+config:
+  theme: 'base'
+  themeVariables:
+    titleColor: '#aaa'
+    primaryColor: '#555'
+    primaryTextColor: '#ccb'
+    lineColor: '#F8B229'
+    secondaryColor: '#006100'
+    edgeLabelBackground: '#000'
+---
 flowchart BT
-    ts[typescript-frontend] -->|cherry-pick| upstream[shared-agentic-template]
-    py[python-backend] -->|cherry-pick| upstream
+    ts[typescript-frontend] linear@==>|cherry-pick| upstream[shared-agentic-template]
+    py[python-backend] linear@==>|cherry-pick| upstream
     upstream -.->|git pull| ts
     upstream -.->|git pull| py
+    linear@{ curve: linear }
 ```
 
 This skill operates on **two repos**: your **project** and your **template.** Claude will `cd` between them during execution, so both need to be cloned locally in Claude-accessible paths with push access.
@@ -60,7 +72,7 @@ You can run the skill at any time. In Claude Code, skills can also be **suggeste
 
 ### Prerequisites
 
-This skill is designed for **macOS only**. Linux compatablity is likely but has not been tested. Claude will check for its dependencies when invoked: [`git`](https://git-scm.com/install), [`jq`](https://github.com/jqlang/jq), [`brew`](https://brew.sh/) and [`gh`](https://cli.github.com/). The helper scripts also rely on standard Unix utilities (typically preinstalled) like `grep`, `sed`, `awk`, and `file`, plus a checksum utility (`shasum`). If any required dependencies are missing, you'll be prompted to let Claude install them. See [Dependencies](/.claude/skills/upstream-cherry-pick/SKILL.md#dependencies).
+This skill is designed for **macOS only**. Linux compatablity is likely but has not been tested. Claude will check for its dependencies when invoked: [`git`](https://git-scm.com/install), [`jq`](https://github.com/jqlang/jq), [`brew`](https://brew.sh/) and [`gh`](https://cli.github.com/). The helper scripts also rely on standard Unix utilities (typically preinstalled) like `grep`, `sed`, `awk`, and `file`, plus a checksum utility (`shasum`). If any required dependencies are missing, you'll be prompted to let Claude install them. See [Prerequisites](/.claude/skills/upstream-cherry-pick/SKILL.md#prerequisites-dependencies--local-repos).
 
 ### Permissions & safety
 
@@ -150,7 +162,7 @@ Claude responds:
 > upstream to your template. Would you like me to run it?
 ```
 
-**But how did it know *now* is a good time to prompt you about this skill?** 
+But how did it know *now* is a good time to prompt you about this skill? 
 
 The **metadata** for all the skills defined in your project's persists in every Claude Code session. It recognized the opportunity because it connects the dots via the criteria we described in [this skill's `description`](/.claude/skills/upstream-cherry-pick/SKILL.md):
 

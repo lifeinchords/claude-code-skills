@@ -8,7 +8,7 @@
 # - If all commits share a common path prefix → suggest squash
 # - If commits touch scattered paths → suggest cherry-pick
 #
-# Platform: macOS (bash 3.2+), Linux
+# Platform: macOS (bash 3.2+). Linux may work but is untested.
 #
 # Usage: ./detect-mode.sh <remote/branch> [count]
 # Example: ./detect-mode.sh tmp-project/main 10
@@ -66,7 +66,7 @@ if ! git rev-parse --verify "$REMOTE_BRANCH^{commit}" &>/dev/null; then
 fi
 
 # Collect all files from all commits
-ALL_FILES=$(git log "$REMOTE_BRANCH" -"$COUNT" --reverse --name-only --pretty=format: | grep -v '^$' | sort -u) || exit 1
+ALL_FILES=$(git log -n "$COUNT" --reverse --name-only --pretty=format: "$REMOTE_BRANCH" -- | grep -v '^$' | sort -u) || exit 1
 
 if [[ -z "$ALL_FILES" ]]; then
     jq -n '{"error": "No files found in commits"}'
@@ -103,7 +103,7 @@ done
 TOP_DIRS=$(cut -d'/' -f1 <<< "$ALL_FILES" | sort -u | wc -l | tr -d ' ')
 
 # Get commit SHAs for reference
-COMMIT_SHAS=$(git log "$REMOTE_BRANCH" -"$COUNT" --reverse --pretty=format:"%h" | tr '\n' ' ')
+COMMIT_SHAS=$(git log -n "$COUNT" --reverse --pretty=format:"%h" "$REMOTE_BRANCH" -- | tr '\n' ' ')
 FIRST_SHA=$(awk '{print $1}' <<< "$COMMIT_SHAS")
 LAST_SHA=$(awk '{print $NF}' <<< "$COMMIT_SHAS")
 

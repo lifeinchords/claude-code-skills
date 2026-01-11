@@ -47,7 +47,7 @@ This skill requires:
 - Checksum utility for backups: `shasum` (macOS) or `sha256sum` (Linux)
 
 This skill also assumes:
-- **macOS** (the dependency installer uses Homebrew; Linux may work but is not currently tested/supported)
+- **macOS** (Linux may work but is not currently tested/supported)
 - A local **project repo** (derived from the template, containing candidate commits)
 - A local **template repo** (the upstream destination, with push access)
 
@@ -55,27 +55,61 @@ This skill also assumes:
 
 This skill includes executable scripts in `.claude/skills/upstream-cherry-pick/scripts/` that handle deterministic operations:
 
-**preflight-check.sh** - Validates template repo state before cherry-picking
+**check-deps.sh** - Verifies required tools are installed
+```bash
+./.claude/skills/upstream-cherry-pick/scripts/check-deps.sh
+# Returns JSON with status: ok, missing, declined, or error
+
+# Exit codes: 
+# 0=aall deps present or installed successfully
+# 1=missing deps and operator declined install (or brew missing)
+# 2=install failed
+# 3 unsupported OS (currently macOS-only installer)
+# On macOS, offers to install missing deps via brew
+```
+
+Notes:
+- Emits interactive prompts to stderr; final machine-readable status is emitted as JSON on stdout
+
+**preflight-check.sh** - Validates template repo state before cherry-picking without mutating repo state (no fetch/pull).
 ```bash
 ./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 # Returns JSON with status: clean, dirty, wrong_branch, or behind
-# Exit codes: 0=clean, 1=uncommitted changes, 2=wrong branch, 3=behind remote, 4=invalid path
+
+# Exit codes: 
+# 0=clean / OK to proceed (may still include a `warning` field in JSON (for example, missing local ref `origin/<default>`)
+# 1=dirty (uncommitted changes present)
+# 2=wrong branch
+# 3=behind/diverged remote (based on existing local origin/<default> ref only)
+# 4=invalid path / not a repo / missing dependency (jq)
 ```
 
 Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** run `git fetch` or `git pull`. If remote sync status can't be verified from existing `origin/<default>` refs, it will warn and ask the operator to fetch/pull explicitly.
 
-**list-commits.sh** - Lists commits with metadata (Claude does classification)
+**list-commits.sh** - Deterministically list commits (sha/message/files) for Claude to classify (NO classification inside the script).
 ```bash
 ./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh <remote/branch> [count]
 # Returns JSON array with: sha, message, files[]
 # NO classification - Claude inspects diffs and applies EXAMPLES.md guidance
+
+# Exit codes:
+# 0=success JSON array of objects {sha, message, files[]}
+# 1=invalid input/missing dependency/branch not found
 ```
 
-**conflict-backup.sh** - Detects conflicts, creates backups, outputs structured analysis
+Notes:
+- Enforces an output size cap and may return a partial result with an `"error"` object
+
+**conflict-backup.sh** - When a cherry-pick detects conflicts, backup and return a structured JSON report. Designed for safety: rejects suspicious paths, skips symlinks, and records checksums when possible.
 ```bash
 ./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh [commit-sha] [commit-message]
 # Returns JSON with conflict details: files, line numbers, types, backup location
-# Exit codes: 0=conflicts backed up, 1=no conflicts, 2=not a repo, 3=backup failed
+
+# Exit codes:
+# 0=conflicts found, creates temp/merge-backups/YYYY-MM-DD/, structured JSON report returned
+# 1=no conflicts detected (not an error)
+# 2=not in a git repository
+# 3=backup failed or missing dependency (jq)
 ```
 
 **detect-mode.sh** - Suggests cherry-pick vs squash based on commit patterns
@@ -84,9 +118,20 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 # Returns JSON with: suggested_mode, reason, common_prefix, files[]
 # If all commits share a path prefix → suggests squash
 # If commits touch scattered paths → suggests cherry-pick
+
+# Exit codes: 
+# 0=success
+# 1=invalid input/missing dependency/branch not found
 ```
 
 Claude interprets script output and handles edge cases requiring judgment.
+
+## Deep details
+
+- **Conflict operator template**: `CONFLICT_TEMPLATE.md`
+- **Troubleshooting / recovery**: `TROUBLESHOOTING.md`
+- **Operator checklist / rigor**: `CHECKLIST.md`
+
 
 ## Operator confirmation gates (safety-first)
 
@@ -122,7 +167,7 @@ How many recent commits to scan? [default: 10]:
 
 Use this value for the git log command in Step 2.
 
-## Classification Guidance
+## Classification Guidance Summary
 
 You MUST read **EXAMPLES.md** for the canonical YES/MAYBE/NO classification patterns. Classification is content-based (not just paths), and EXAMPLES.md is the source of truth.
 
@@ -166,25 +211,9 @@ Run the preflight script to validate template repo state:
 ./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 ```
 
-Handle based on exit code:
+If output indicates any non-clean state, stop and ask operator how to proceed.
 
-- **Exit 0 (clean)**: Proceed to Cherry-Pick Procedure
-- **Exit 1 (uncommitted changes)**: Stash changes first:
-  ```bash
-  cd <template-repo>
-  git stash push -u -m "pre-cherry-pick-$(date +%Y-%m-%d-%H%M)"
-  ```
-- **Exit 2 (wrong branch)**: Switch to default branch:
-  ```bash
-  cd <template-repo>
-  git checkout <default-branch>
-  ```
-- **Exit 3 (behind remote)**: Pull latest:
-  ```bash
-  cd <template-repo>
-  git pull origin <default-branch>
-  ```
-- **Exit 4 (invalid path)**: Verify template repo path with operator
+For exit codes and operator actions, see `TROUBLESHOOTING.md`.
 
 
 ## Cherry-Pick Procedure
@@ -203,8 +232,6 @@ git remote add tmp-project https://github.com/<org>/<project-repo>.git
 # Fetch all branches from the project repo
 git fetch tmp-project
 ```
-
-Operator confirmation REQUIRED before each of: `git remote add …`, `git fetch …`
 
 ### Step 2: List, classify, and detect mode
 
@@ -314,45 +341,21 @@ If operator asks to fix a MAYBE commit before cherry-picking:
 5. **After approval**: Commit the fixed version
 6. **Resume cherry-picking**: Return to template repo and continue
 
-### Step 4: Apply commits
+### Step 4: Apply commits (compact)
 
-**4a. Create feature branch** (if PR delivery chosen):
-```bash
-git checkout -b feature/<descriptive-name>
-```
-
-**4b. Apply commits based on mode:**
-
-**Mode A: Cherry-pick (preserve history)**
-```bash
-# Cherry-pick multiple commits (oldest to newest)
-git cherry-pick <sha1> <sha2> <sha3>
-
-# Or cherry-pick a range
-git cherry-pick <first-sha>^..<last-sha>
-```
-
-**Mode B: Squash**
-
-Option B1 - Squash locally:
-```bash
-# Cherry-pick all commits first
-git cherry-pick <first-sha>^..<last-sha>
-
-# Then squash into one commit
-git reset --soft HEAD~<N>
-git commit -m "<Claude drafts descriptive message>"
-```
-
-Option B2 - Let GitHub squash:
-```bash
-# Cherry-pick all commits (history preserved on branch)
-git cherry-pick <first-sha>^..<last-sha>
-
-# Push branch, then select "Squash and merge" when merging PR
-```
-
-Operator confirmation REQUIRED before: `git cherry-pick …`, `git reset …`, `git commit …`
+- **If Delivery = PR**:
+  - Create a branch: `git checkout -b feature/<descriptive-name>`
+- **If Mode = Cherry-pick**:
+  - Apply commits (oldest → newest): `git cherry-pick <sha1> <sha2> ...`
+  - Or apply a range: `git cherry-pick <first-sha>^..<last-sha>`
+    - If `<first-sha>` is the repository root commit (no parent), `<first-sha>^` fails. Use explicit SHAs instead.
+- **If Mode = Squash (locally)**:
+  - `git cherry-pick <first-sha>^..<last-sha>`
+  - `git reset --soft HEAD~<N>`
+  - `git commit -m "<Claude drafts descriptive message>"`
+- **If Mode = Squash (GitHub)**:
+  - `git cherry-pick <first-sha>^..<last-sha>`
+  - (Later: select **Squash and merge** in the PR UI)
 
 ### Step 5: Handle conflicts (OPERATOR REQUIRED)
 
@@ -391,7 +394,7 @@ Conflict type categories:
 
 ### Step 6: Push and deliver
 
-**Delivery A: Create PR (recommended)**
+**Delivery A: Create PR**
 ```bash
 # Push feature branch
 git push origin feature/<branch-name>
@@ -408,8 +411,6 @@ If operator chose "Let GitHub squash", remind them to select **"Squash and merge
 git push origin <default-branch>
 ```
 
-Operator confirmation REQUIRED before: `git push …`, `gh pr create …`
-
 ### Step 7: Cleanup
 
 ```bash
@@ -422,8 +423,6 @@ git remote -v
 # Restore stashed changes if any
 git stash pop
 ```
-
-Operator confirmation REQUIRED before: `git remote remove …`, `git stash pop`
 
 ### Step 8: Return to project and secure upstream
 
@@ -443,90 +442,7 @@ If upstream remote exists, disable push to prevent accidentally pushing project 
 git remote set-url --push upstream DISABLED
 ```
 
-Operator confirmation REQUIRED before: `git remote set-url --push …`
-
 **Why disable push?** The upstream remote points to your template repo. Disabling push prevents accidentally running `git push upstream` from your project, which would pollute the template with project-specific code. You can still fetch/pull template updates; only pushes are blocked.
 
 If no upstream remote exists (standalone repo), skip this step.
 
-
-## Error Recovery
-
-### Interrupted Cherry-Pick
-
-If the cherry-pick process is interrupted (Ctrl+C, system crash, connection loss), check the state before resuming:
-
-```bash
-cd <template-repo>
-
-# Check if cherry-pick is in progress
-git status
-```
-
-If you see "You are currently cherry-picking commit..." or "Unmerged paths", you have an in-progress cherry-pick:
-
-**Option A: Resume after fixing conflicts**
-```bash
-# After manually resolving conflicts:
-git add .
-git cherry-pick --continue
-```
-
-**Option B: Abort and restart**
-```bash
-# Abort the current cherry-pick
-git cherry-pick --abort
-
-# Clean up temporary remote
-git remote remove tmp-project 2>/dev/null || true
-
-# Return to clean state
-git reset --hard origin/<default-branch>
-```
-
-**Option C: Skip problematic commit**
-```bash
-# Skip this commit and continue with next one
-git cherry-pick --skip
-```
-
-After recovery, verify the template repo state:
-```bash
-git status
-git log --oneline -5
-```
-
-### Script outputs & exit codes (reference)
-
-Not all non-zero exits are “errors” (e.g. `conflict-backup.sh` uses exit code 1 to mean “no conflicts”). For a clean, extractable reference of each script’s JSON output and exit codes, see `SCRIPTS.md`.
-
-
-## Rigor
-
-**Default enforcement**: required
-
-When `required`:
-
-A: Always stash uncommitted changes in template first
-B: Always create backup for conflicts in temp/merge-backups/
-C: Always verify remote cleanup after cherry-pick
-D: Never force push to template
-E: Never auto-resolve merge conflicts - stop for operator
-
-When `exploratory`:
-A: Can skip backup creation for simple cherry-picks
-
-## Checklist
-
-- [ ] Template repo has no uncommitted changes (stashed if needed)
-- [ ] On default branch in template
-- [ ] Pulled latest from origin
-- [ ] Temporary remote added
-- [ ] Commits classified as YES/MAYBE/NO
-- [ ] Operator reviewed and approved commit list
-- [ ] Cherry-pick completed without errors
-- [ ] Conflicts backed up and resolved (if any)
-- [ ] Pushed to template
-- [ ] Temporary remote removed
-- [ ] Restore stashed changes (git stash pop)
-- [ ] Project upstream push still DISABLED
