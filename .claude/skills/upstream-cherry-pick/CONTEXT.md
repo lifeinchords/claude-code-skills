@@ -1,6 +1,4 @@
-# Cherry-Pick Agentic Patterns Skill
-
-A [`Claude Code Skill`](https://code.claude.com/docs/en/skills) for bringing reusable agentic dev patterns from project repos to your upstream template.
+# Context
 
 ## Why?
 
