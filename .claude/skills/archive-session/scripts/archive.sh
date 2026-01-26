@@ -6,9 +6,8 @@ set -euo pipefail
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
 # Archive destination - configurable via env var or argument
-# Default: .claude/session-archive/ (project-local)
 # Can be overridden with CLAUDE_ARCHIVE_DIR env var or --output=<path> argument
-DEFAULT_ARCHIVE_BASE="${PROJECT_DIR}/.claude/session-archive"
+DEFAULT_ARCHIVE_BASE="${PROJECT_DIR}/docs/process/claudeCodeSessions"
 ARCHIVE_BASE="${CLAUDE_ARCHIVE_DIR:-${DEFAULT_ARCHIVE_BASE}}"
 
 # Claude Code stores transcripts in ~/.claude/projects/<project-hash>/
@@ -16,13 +15,54 @@ PROJECT_HASH=$(echo "${PROJECT_DIR}" | sed 's|/|-|g')
 TRANSCRIPT_DIR="${HOME}/.claude/projects/${PROJECT_HASH}"
 
 # Accept session ID as first positional arg, or detect from most recent
-SESSION_ID=""
+# Supports: UUID, relative refs (last, last-1, HEAD, HEAD~1, etc.)
+SESSION_REF=""
 for arg in "$@"; do
     case "$arg" in
         --output=*) ARCHIVE_BASE="${arg#*=}" ;;
-        *) [ -z "$SESSION_ID" ] && SESSION_ID="$arg" ;;
+        *) [ -z "$SESSION_REF" ] && SESSION_REF="$arg" ;;
     esac
 done
+
+# Resolve relative session references to UUID
+# Supports: last, last-N (N = 0-based offset from most recent)
+resolve_session_ref() {
+    local ref="$1"
+    local offset=0
+
+    case "$ref" in
+        # last = most recent (offset 0)
+        last)
+            offset=0
+            ;;
+        # last-N = Nth before most recent
+        last-[0-9]*)
+            offset="${ref#last-}"
+            ;;
+        # Already a UUID - return as-is
+        *)
+            echo "$ref"
+            return 0
+            ;;
+    esac
+
+    # Get session at offset (1-indexed for sed, so offset+1)
+    local line_num=$((offset + 1))
+    local session_file
+    session_file=$(ls -t "${TRANSCRIPT_DIR}"/*.jsonl 2>/dev/null | sed -n "${line_num}p")
+
+    if [ -z "$session_file" ]; then
+        echo "Error: No session found at offset ${offset}" >&2
+        return 1
+    fi
+
+    basename "$session_file" .jsonl
+}
+
+SESSION_ID=""
+if [ -n "${SESSION_REF}" ]; then
+    SESSION_ID=$(resolve_session_ref "${SESSION_REF}") || exit 1
+fi
 
 # Security: Validate SESSION_ID format (UUID only)
 if [ -n "${SESSION_ID}" ]; then
@@ -38,7 +78,7 @@ ARCHIVE_BASE=$(eval echo "${ARCHIVE_BASE}")
 
 # Security: Ensure archive path is not a sensitive system directory (before path normalization)
 case "${ARCHIVE_BASE}" in
-    /etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*|/System|/System/*|/private/etc|/private/etc/*|/private/var/root|/private/var/root/*)
+    /etc | /etc/* | /bin | /bin/* | /sbin | /sbin/* | /usr/bin | /usr/bin/* | /usr/sbin | /usr/sbin/* | /System | /System/* | /private/etc | /private/etc/* | /private/var/root | /private/var/root/*)
         echo "Error: Cannot archive to system directory: ${ARCHIVE_BASE}"
         exit 1
         ;;
@@ -102,33 +142,51 @@ if [ -d "${SUBAGENTS_DIR}" ]; then
 fi
 
 # Generate HTML report with claude-code-log
-if [ "${SUBAGENT_COUNT}" -gt 0 ]; then
-    REPORT_SOURCE="${SESSION_ARCHIVE}/subagents"
-elif [ -f "${SESSION_ARCHIVE}/session.jsonl" ]; then
-    REPORT_SOURCE="${SESSION_ARCHIVE}/session.jsonl"
-else
-    REPORT_SOURCE=""
-fi
-
-if [ -n "${REPORT_SOURCE}" ]; then
+# Always generate for main session, plus subagents if present
+generate_html() {
+    local source="$1"
+    local label="$2"
     if command -v claude-code-log &>/dev/null; then
-        echo "Generating HTML report..."
-        claude-code-log "${REPORT_SOURCE}" --open-browser 2>/dev/null || {
-            echo "Warning: HTML report generation failed"
+        echo "Generating ${label} HTML report..."
+        claude-code-log "${source}" --open-browser 2>/dev/null || {
+            echo "Warning: ${label} HTML report generation failed"
         }
     elif command -v uvx &>/dev/null; then
-        echo "Generating HTML report via uvx..."
-        uvx claude-code-log@latest "${REPORT_SOURCE}" --open-browser 2>/dev/null || {
-            echo "Warning: HTML report generation failed"
+        echo "Generating ${label} HTML report via uvx..."
+        uvx claude-code-log@latest "${source}" --open-browser 2>/dev/null || {
+            echo "Warning: ${label} HTML report generation failed"
         }
     else
-        echo "Warning: claude-code-log not available, skipping report generation"
+        echo "Warning: claude-code-log not available, skipping ${label} report"
     fi
+}
 
-    # Remove redundant combined file if subagents were processed
-    if [ "${SUBAGENT_COUNT}" -gt 0 ]; then
-        rm -f "${SESSION_ARCHIVE}/subagents/combined_transcripts.html"
-    fi
+# Generate main session HTML
+if [ -f "${SESSION_ARCHIVE}/session.jsonl" ]; then
+    generate_html "${SESSION_ARCHIVE}/session.jsonl" "main session"
+fi
+
+# Generate individual HTML per subagent file
+if [ "${SUBAGENT_COUNT}" -gt 0 ]; then
+    for agent_file in "${SESSION_ARCHIVE}/subagents"/agent-*.jsonl; do
+        [ -f "$agent_file" ] || continue
+        agent_name=$(basename "$agent_file" .jsonl)
+        agent_html="${SESSION_ARCHIVE}/subagents/${agent_name}.html"
+
+        if command -v claude-code-log &>/dev/null; then
+            echo "Generating ${agent_name} HTML..."
+            claude-code-log "$agent_file" -o "$agent_html" --open-browser 2>/dev/null || {
+                echo "Warning: ${agent_name} HTML generation failed"
+            }
+        elif command -v uvx &>/dev/null; then
+            echo "Generating ${agent_name} HTML via uvx..."
+            uvx claude-code-log@latest "$agent_file" -o "$agent_html" --open-browser 2>/dev/null || {
+                echo "Warning: ${agent_name} HTML generation failed"
+            }
+        else
+            echo "Warning: claude-code-log not available, skipping ${agent_name}"
+        fi
+    done
 fi
 
 # Create session metadata

@@ -1,6 +1,6 @@
 ---
 name: archive-session
-description: Archive session transcripts + subagent logs to browsable HTML. Default output is .claude/session-archive/exported-on-<timestamp>/. User may override with --output=<path>. Ask user for destination preference before running.
+description: Archive session transcripts + subagent logs to browsable HTML. Supports relative refs (last, last-1, last-2) or UUID. Default output is docs/process/claudeCodeSessions/exported-on-<timestamp>/. User may override with --output=<path>.
 user-invocable: true
 allowed-tools:
   - Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)
@@ -16,17 +16,11 @@ Archives the current Claude Code session transcript and any subagent logs, gener
 - End of work session for audit trail
 - Debugging session or subagent execution
 
-## Before Running
+## Arguments
 
-Ask user where to archive:
-
-```
-Archiving session. Default: .claude/session-archive/exported-on-<timestamp>/
-
-Override? Provide a path, or press enter for default.
-```
-
-If user provides path, pass via `--output=<path>`. Otherwise use default.
+- No arguments: archives to default location `docs/process/claudeCodeSessions/exported-on-<timestamp>/`
+- `--output=<path>`: archives to custom location
+- Session ref (optional): `last`, `last-1`, `last-2`, or UUID
 
 ## What It Does
 
@@ -38,7 +32,7 @@ If user provides path, pass via `--output=<path>`. Otherwise use default.
 
 ## Output Location
 
-**Default:** in the project claude folder at `.claude/session-archive/exported-on-<timestamp>/`
+**Default:** `docs/process/claudeCodeSessions/exported-on-<timestamp>/`
 
 **Override:** Set either `CLAUDE_ARCHIVE_DIR` env var or use `--output=<path>` argument.
 
@@ -48,33 +42,59 @@ For example, when using the [Get Shit Done](https://github.com/glittercowboy/get
 
 ## Default exported folder structure
 ```
-.claude/session-archive/exported-on-2026-01-14_15-51-05/
+docs/process/claudeCodeSessions/exported-on-2026-01-14_15-51-05/
 ├── session-info.txt      # Metadata
 ├── session.jsonl         # Main transcript
-├── session.html          # Main file (if no subagents)
+├── session.html          # Main session HTML
 └── subagents/            # If subagents exist
-    ├── agent-*.jsonl     # Raw transcripts
-    ├── cache/            # Parsed JSON
-    └── session-*.html    # Browsable file
+    ├── agent-a2bad1a.jsonl
+    ├── agent-a2bad1a.html    # One HTML per subagent
+    ├── agent-b3cde2b.jsonl
+    ├── agent-b3cde2b.html
+    └── cache/                # Created by claude-code-log (parsed JSON for faster re-renders)
 ```
 
 ## Usage
+
+**Via Claude Code Skill:**
 
 ```bash
 # Archive current session (auto-detected, to default location)
 /archive-session
 
-# Archive specific session by ID
+# Archive specific session by UUID
 /archive-session 602fca42-0159-466c-bdb7-00745e1939f1
 
-# Archive to a custom location either with: 
-/archive-session --output=./my-archives
+# Archive using relative references
+/archive-session last      # most recent session (same as no arg)
+/archive-session last-1    # second most recent
+/archive-session last-2    # third most recent
 
-# or
+# Archive to custom location
+/archive-session --output=./my-archives
+/archive-session last-1 --output=./my-archives
+/archive-session 602fca42-0159-466c-bdb7-00745e1939f1 --output=./my-archives
+```
+
+**Direct Bash Execution:**
+
+```bash
+# Archive current session
+bash .claude/skills/archive-session/scripts/archive.sh
+
+# Archive with relative reference
+bash .claude/skills/archive-session/scripts/archive.sh last
+bash .claude/skills/archive-session/scripts/archive.sh last-1
+
+# Archive specific UUID
+bash .claude/skills/archive-session/scripts/archive.sh 602fca42-0159-466c-bdb7-00745e1939f1
+
+# Archive to custom location via env var
 CLAUDE_ARCHIVE_DIR=~/some/other/path bash .claude/skills/archive-session/scripts/archive.sh
 
-# Both: specific session to custom location
-/archive-session 602fca42-0159-466c-bdb7-00745e1939f1 --output=./my-archives
+# Archive to custom location via arg
+bash .claude/skills/archive-session/scripts/archive.sh --output=./my-archives
+bash .claude/skills/archive-session/scripts/archive.sh last-1 --output=./my-archives
 ```
 
 ## TUI for Richer Experience
