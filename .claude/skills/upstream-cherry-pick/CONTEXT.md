@@ -174,7 +174,7 @@ oh, good idea, ok.. let's only check this week's commits
 
 The skill defaults to scanning the last 10 commits ([`list-commits.sh`](/.claude/skills/upstream-cherry-pick/scripts/list-commits.sh) defaults `count=10`), but Claude adapts to your request, understanding this week you made 6 commits to `typescript-frontend`. 
 
-It invokes this skill and presents recommendations in 3 buckets:
+It invokes this skill and presents recommendations in a single chronological table with classifications:
 
 - **YES**: process engineering tooling that's portable, cherry-pick as-is
 - **MAYBE**: candidates that need changes or judgment, with update proposals
@@ -183,34 +183,25 @@ It invokes this skill and presents recommendations in 3 buckets:
 ### Recommendations
 
 ```sh
-> CHERRY PICK RECOMMENDATION (oldest first):
-> 
-> YES (cherry-pick as-is):
-> | SHA     | Message                                             |
-> |---------|-----------------------------------------------------|
-> | a3f8c21 | [process] Add PR orchestrator agent                 |
-> |         | -> .claude/agents/orchestrator.md                   |
-> |         | -> docs/process/pr-review.md                        |
-> | 7b2e9d4 | [process] Add commit splitting rule                 |
-> |         | -> .claude/CLAUDE.md                                |
-> 
-> MAYBE (needs changes or judgment):
-> | SHA     | Message                                | Offer                    |
-> |---------|----------------------------------------|--------------------------|
-> | e5c1a08 | Add Playwright debugging skill         | Parameterize path        |
-> |         | -> .claude/skills/playwright/SKILL.md  | /Users/alex -> $PROJECT  |
-> 
-> NO (project-specific):
-> | SHA     | Message                        | Reason              |
-> |---------|--------------------------------|---------------------|
-> | 2c8e7a3 | Update package.json name       | Config change       |
-> |         | -> package.json                |                     |
-> | 9d4f2b1 | Add user auth flow             | Feature code        |
-> |         | -> src/auth/login.ts           |                     |
-> |         | -> src/auth/session.ts         |                     |
-> | f1b3d92 | PRD v2                         | Project docs        |
-> |         | -> docs/prd-v2.md              |                     |
-> 
+> CHERRY PICK RECOMMENDATION (6 commits, oldest first):
+>
+> | #  | Class | SHA     | Message                          | Notes                    |
+> |----|-------|---------|----------------------------------|--------------------------|
+> | 1  | NO    | 2c8e7a3 | Update package.json name         | Config change            |
+> |    |       |         | -> package.json                  |                          |
+> | 2  | NO    | 9d4f2b1 | Add user auth flow               | Feature code             |
+> |    |       |         | -> src/auth/login.ts             |                          |
+> |    |       |         | -> src/auth/session.ts           |                          |
+> | 3  | YES   | a3f8c21 | Add PR orchestrator agent        |                          |
+> |    |       |         | -> .claude/agents/orchestrator.md|                          |
+> |    |       |         | -> docs/process/pr-review.md     |                          |
+> | 4  | YES   | 7b2e9d4 | Add commit splitting rule        |                          |
+> |    |       |         | -> .claude/CLAUDE.md             |                          |
+> | 5  | NO    | f1b3d92 | PRD v2                           | Project docs             |
+> |    |       |         | -> docs/prd-v2.md                |                          |
+> | 6  | MAYBE | e5c1a08 | Add Playwright debugging skill   | /Users/alex -> $PROJECT  |
+> |    |       |         | -> .claude/skills/playwright/... |                          |
+>
 > Proceed?
 
 ```
@@ -374,6 +365,28 @@ After merging the PR, share improvements downstream:
 cd ~/dev-projects/python-backend
 git pull upstream dev
 ```
+
+## Squash limitations
+
+**Why squash mode may require multiple conflict resolutions:**
+
+When you select commits to cherry-pick, they're often non-sequential (e.g., commits 1, 4, 7 out of 10). Unlike a GitHub PR squash-merge which compares final branch state vs base (one diff, one conflict resolution), git cherry-pick applies commits one by one.
+
+This means:
+- **Cherry-pick mode:** Each commit applies individually. Conflicts resolved per commit.
+- **Squash mode:** Still cherry-picks individually, then squashes with `git reset --soft`. Same conflict potential.
+
+There's no clean way to get "final state only" for scattered commits because they aren't contiguous. You're picking snapshots from different points in history.
+
+**When squash works well:**
+- Sequential commits (range works: `git diff <first>^..<last>`)
+- Commits touching different files (no conflicts between them)
+
+**When squash gets painful:**
+- Non-sequential commits modifying the same files
+- Many commits with interdependencies
+
+**Recommendation:** If you anticipate conflicts, cherry-pick mode gives you clearer context about which commit caused each conflict. Squash mode saves commit history clutter but makes conflict attribution harder.
 
 ## Todo
 
