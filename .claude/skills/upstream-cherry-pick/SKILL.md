@@ -268,32 +268,27 @@ For MAYBE commits, determine subtype:
 
 **3a. Present classification using EXACTLY this format:**
 
+Present all commits in one chronological table (oldest first). The Class column indicates YES/MAYBE/NO, and the Notes column explains the offer (for MAYBE) or reason (for NO).
+
 ```
-CHERRY PICK RECOMMENDATION (oldest first):
+CHERRY PICK RECOMMENDATION (<N> commits, oldest first):
 
-YES (cherry-pick as-is):
-| SHA     | Message                                             |
-|---------|-----------------------------------------------------|
-| <sha1>  | <message>                                           |
-|         | -> <file1>                                          |
-|         | -> <file2>                                          |
-| <sha2>  | <message>                                           |
-|         | -> <file1>                                          |
-
-MAYBE (needs changes or judgment):
-| SHA     | Message                                | Offer                    |
-|---------|----------------------------------------|--------------------------|
-| <sha1>  | <message>                              | <what needs fixing>      |
-|         | -> <file1>                             | <action to take>         |
-
-NO (project-specific):
-| SHA     | Message                        | Reason              |
-|---------|--------------------------------|---------------------|
-| <sha1>  | <message>                      | <reason>            |
-|         | -> <file1>                     |                     |
+| #  | Class | SHA     | Message                          | Notes                    |
+|----|-------|---------|----------------------------------|--------------------------|
+| 1  | YES   | <sha1>  | <message>                        |                          |
+|    |       |         | -> <file1>                       |                          |
+|    |       |         | -> <file2>                       |                          |
+| 2  | MAYBE | <sha2>  | <message>                        | <offer: what to fix>     |
+|    |       |         | -> <file1>                       |                          |
+| 3  | NO    | <sha3>  | <message>                        | <reason: why skipped>    |
+|    |       |         | -> <file1>                       |                          |
+| 4  | YES   | <sha4>  | <message>                        |                          |
+|    |       |         | -> <file1>                       |                          |
 ```
 
 **3b. Present mode choice** (if squash was suggested):
+
+If YES commits are non-sequential, warn operator about potential multiple conflict resolutions:
 
 ```
 MODE OPTIONS:
@@ -302,6 +297,10 @@ Suggested: SQUASH (all commits share prefix: .claude/skills/...)
 
 A: Cherry-pick (preserve individual commit history)
 B: Squash (combine into single clean commit)
+
+Note: Selected commits are non-sequential (#1, #4, #7). Both modes apply
+commits individually, so conflicts may need resolution per commit.
+See CONTEXT.md "Squash limitations" for details.
 
 Which mode?
 ```
@@ -346,18 +345,21 @@ If operator asks to fix a MAYBE commit before cherry-picking:
 - **If Delivery = PR**:
   - Create a branch: `git checkout -b feature/<descriptive-name>`
 - **If Mode = Cherry-pick**:
-  - Apply commits (oldest → newest): `git cherry-pick <sha1> <sha2> ...`
-  - Or apply a range: `git cherry-pick <first-sha>^..<last-sha>`
+  - Apply commits (oldest → newest) with `-x` flag to record source: `git cherry-pick -x <sha1> <sha2> ...`
+  - The `-x` flag appends `(cherry picked from commit <sha>)` to each commit message
+  - Or apply a range: `git cherry-pick -x <first-sha>^..<last-sha>`
     - If `<first-sha>` is the repository root commit (no parent), `<first-sha>^` fails. Use explicit SHAs instead.
 - **If Mode = Squash (locally)**:
-  - Generate patch of final state: `git diff <first-sha>^..<last-sha> > /tmp/cherry-pick-squash.patch`
-  - Apply with 3-way merge: `git apply --3way /tmp/cherry-pick-squash.patch`
-  - If conflicts, resolve once (only final state conflicts, not sequential)
-  - Stage and commit: `git add . && git commit -m "<Claude drafts descriptive message>"`
+  - Cherry-pick all commits: `git cherry-pick <sha1> <sha2> <sha3> ...`
+  - **Note:** Non-sequential commits may require conflict resolution per commit (see CONTEXT.md "Squash limitations")
+  - Squash into single commit: `git reset --soft HEAD~<N>` where N = number of commits applied
+  - Stage and commit with source reference: `git add . && git commit -m "<Claude drafts descriptive message>
+
+cherry picked from: <sha1>, <sha2>, <sha3>"`
 - **If Mode = Squash (GitHub)**:
-  - Same patch approach as local squash, but commit to feature branch
+  - Same cherry-pick + reset approach as local squash, but commit to feature branch
+  - Include source reference in commit message (list all SHAs)
   - Push feature branch, create PR
-  - (GitHub's "Squash and merge" option is redundant since already squashed, but harmless)
 
 ### Step 5: Handle conflicts (OPERATOR REQUIRED)
 
