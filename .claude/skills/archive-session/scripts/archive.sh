@@ -141,51 +141,45 @@ if [ -d "${SUBAGENTS_DIR}" ]; then
     fi
 fi
 
-# Generate HTML report with claude-code-log
-# Always generate for main session, plus subagents if present
-generate_html() {
+# Generate HTML and Markdown reports with claude-code-log
+generate_report() {
     local source="$1"
     local label="$2"
+    local format="$3"
+    local open_flag=""
+
+    # Only open browser for HTML, not for MD
+    [ "$format" = "html" ] && open_flag="--open-browser"
+
     if command -v claude-code-log &>/dev/null; then
-        echo "Generating ${label} HTML report..."
-        claude-code-log "${source}" --open-browser 2>/dev/null || {
-            echo "Warning: ${label} HTML report generation failed"
+        echo "Generating ${label} ${format^^} report..."
+        claude-code-log "${source}" -f "${format}" ${open_flag} 2>/dev/null || {
+            echo "Warning: ${label} ${format^^} report generation failed"
         }
     elif command -v uvx &>/dev/null; then
-        echo "Generating ${label} HTML report via uvx..."
-        uvx claude-code-log@latest "${source}" --open-browser 2>/dev/null || {
-            echo "Warning: ${label} HTML report generation failed"
+        echo "Generating ${label} ${format^^} report via uvx..."
+        uvx claude-code-log@latest "${source}" -f "${format}" ${open_flag} 2>/dev/null || {
+            echo "Warning: ${label} ${format^^} report generation failed"
         }
     else
-        echo "Warning: claude-code-log not available, skipping ${label} report"
+        echo "Warning: claude-code-log not available, skipping ${label} ${format^^} report"
     fi
 }
 
-# Generate main session HTML
+# Generate main session HTML and Markdown
 if [ -f "${SESSION_ARCHIVE}/session.jsonl" ]; then
-    generate_html "${SESSION_ARCHIVE}/session.jsonl" "main session"
+    generate_report "${SESSION_ARCHIVE}/session.jsonl" "main session" "html"
+    generate_report "${SESSION_ARCHIVE}/session.jsonl" "main session" "md"
 fi
 
-# Generate individual HTML per subagent file
+# Generate individual HTML and MD per subagent file
 if [ "${SUBAGENT_COUNT}" -gt 0 ]; then
     for agent_file in "${SESSION_ARCHIVE}/subagents"/agent-*.jsonl; do
         [ -f "$agent_file" ] || continue
         agent_name=$(basename "$agent_file" .jsonl)
-        agent_html="${SESSION_ARCHIVE}/subagents/${agent_name}.html"
 
-        if command -v claude-code-log &>/dev/null; then
-            echo "Generating ${agent_name} HTML..."
-            claude-code-log "$agent_file" -o "$agent_html" --open-browser 2>/dev/null || {
-                echo "Warning: ${agent_name} HTML generation failed"
-            }
-        elif command -v uvx &>/dev/null; then
-            echo "Generating ${agent_name} HTML via uvx..."
-            uvx claude-code-log@latest "$agent_file" -o "$agent_html" --open-browser 2>/dev/null || {
-                echo "Warning: ${agent_name} HTML generation failed"
-            }
-        else
-            echo "Warning: claude-code-log not available, skipping ${agent_name}"
-        fi
+        generate_report "$agent_file" "${agent_name}" "html"
+        generate_report "$agent_file" "${agent_name}" "md"
     done
 fi
 
@@ -196,6 +190,7 @@ Project: ${PROJECT_DIR}
 Timestamp: ${TIMESTAMP}
 Main Transcript: ${MAIN_SIZE}
 Subagent Count: ${SUBAGENT_COUNT}
+Formats: HTML, Markdown
 EOF
 
 echo ""

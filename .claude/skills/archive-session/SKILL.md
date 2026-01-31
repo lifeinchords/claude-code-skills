@@ -1,6 +1,6 @@
 ---
 name: archive-session
-description: Archive session transcripts + subagent logs to browsable HTML. Supports relative refs (last, last-1, last-2) or UUID. Default output is docs/process/claudeCodeSessions/exported-on-<timestamp>/. User may override with --output=<path>.
+description: Archive session transcripts + subagent logs to browsable HTML and Markdown. Supports relative refs (last, last-1, last-2) or UUID. Default output is docs/process/claudeCodeSessions/exported-on-<timestamp>/. User may override with --output=<path>.
 user-invocable: true
 allowed-tools:
   - Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)
@@ -8,13 +8,13 @@ allowed-tools:
 
 # Archive Session
 
-Archives the current Claude Code session transcript and any subagent logs, generating a browsable HTML file.
+Archives the current Claude Code session transcript and any subagent logs, generating browsable HTML and Markdown files.
 
 ## When to Use
 
-- Context reaches ~90% capacity (per high-context protocol)
 - End of work session for audit trail
 - Debugging session or subagent execution
+- Before context gets too large
 
 ## Arguments
 
@@ -27,8 +27,8 @@ Archives the current Claude Code session transcript and any subagent logs, gener
 1. Detects current session (most recently modified transcript)
 2. Archives main session transcript (`session.jsonl`)
 3. Archives subagent transcripts if present (`subagents/`)
-4. Generates HTML file via `claude-code-log` dependency, or uvx
-5. Opens file in browser
+4. Generates HTML and Markdown files via `claude-code-log` dependency, or uvx
+5. Opens HTML in browser
 
 ## Output Location
 
@@ -46,12 +46,15 @@ docs/process/claudeCodeSessions/exported-on-2026-01-14_15-51-05/
 ├── session-info.txt      # Metadata
 ├── session.jsonl         # Main transcript
 ├── session.html          # Main session HTML
+├── session.md            # Main session Markdown
 └── subagents/            # If subagents exist
     ├── agent-a2bad1a.jsonl
-    ├── agent-a2bad1a.html    # One HTML per subagent
+    ├── agent-a2bad1a.html    # HTML per subagent
+    ├── agent-a2bad1a.md      # Markdown per subagent
     ├── agent-b3cde2b.jsonl
     ├── agent-b3cde2b.html
-    └── cache/                # Created by claude-code-log (parsed JSON for faster re-renders)
+    ├── agent-b3cde2b.md
+    └── cache/                # Created by claude-code-log
 ```
 
 ## Usage
