@@ -1,0 +1,57 @@
+## Auto archive session before compaction
+
+Extends the [archive-session](../skills/archive-session/SKILL.md) skill, by enabling Claude Code to *automatically* archive the session right before it compacts context. Great for YOLO mode or long-running orchestration.
+
+### How it works
+
+1. Claude Code internally detects context is full, initiates its compact
+2. Claude Code fires `PreCompact` hook, receives session ID via stdin
+3. This Hook calls our Skill's `archive.sh` with that session ID
+4. Parent and per-subagent logs exported to  `<project-root>/docs/process/claudeCodeSessions/exported-on-<timestamp>/` as `html`, `md`, `json` files 
+5. Claude Code compact exxecutes, leaving you with a fresh session context window 
+
+### Install
+
+Copy this hook to your project settings:
+
+```bash
+cp -r .claude/hooks /path/to/your/project/.claude/hooks/
+```
+
+You can also set it up globally, look up how on the CC docs.
+
+### Configure
+
+Add this block to your project's  `.claude/settings.local.json`  file:
+
+```json
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-compact-archive.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Output path
+
+Default: `<project-root>/docs/process/claudeCodeSessions/exported-on-<timestamp>/`
+
+Override by exporting `CLAUDE_ARCHIVE_DIR` in your shell profile, or edit the hook script to pass `--output=<path>` to `archive.sh`.
+
+## Other hook events
+
+Claude Code supports hooks for many events beyond PreCompact. See the official [Claude Code Hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) docs for all possibilities.
+
+## Dependencies
+
+This repo's `archive-session` Skill

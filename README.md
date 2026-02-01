@@ -1,29 +1,76 @@
-# Claude Code Skills
+# Claude Code Tools
 
 Reusable skills for AI-assisted workflow automation and process engineering. Built while experimenting with Claude Code, Cursor, and MCP servers.
 
-## Skills
 
-### [upstream-cherry-pick](.claude/skills/upstream-cherry-pick/SKILL.md)
-Identifies and extracts reusable workflow patterns from project repos and contributes them upstream to template repos. Analyzes commit content to classify what's portable automation versus project-specific code.
+## [upstream-cherry-pick](.claude/skills/upstream-cherry-pick/SKILL.md) Skill
 
-Use case: Continuous process improvement that helps you sync improvements while working on multiple projects
+Say you work on many projects, all started from a project template. You have your AI rules, skills, agents, and docs tuned to your tools, stack and IDE's. As you iterate, you find yourself improving workflows in the child projects.
 
+This skill helps you extract those commits back to your template repo. It:
 
-Full docs: [Context](.claude/skills/upstream-cherry-pick/CONTEXT.md)
-
-### [archive-session](.claude/skills/archive-session/SKILL.md)
-Archives Claude Code session transcripts and subagent logs with browsable HTML reports. Auto-detects sessions and validates paths for security.
-
-Use case: Keeping detailed process history for complex multi/sub agent execution. Can be inserted into workflows for automatically saving progress before auto-compaction wipes history
+- intelligently analyzes recent commits by content
+- classifies them as YES/NO/MAYBE for reusability
+- gives you a detailed analysis, with the key files changed in each commit you don't need to switch to git history view for investigation
+- interactively guides you through the cherry-picking process, safely taking care of the complex git steps. It prioritizes **safety** so changes in both the child (project) and parent (template) are respected/saved
 
 
-## Installation
-
-Copy a skill to your project's `.claude/skills/`:
+### Installation
 
 ```bash
-cp -r .claude/skills/archive-session ~/.claude/skills/
+cp -r .claude/skills/upstream-cherry-pick /path/to/your/project/.claude/skills/
 ```
 
-See individual SKILL.md files for usage and dependencies.
+### Usage
+
+Restart Claude Code, and invoke with `/upstream-cherry-pick` or by asking it to run it in your chat session
+
+Full docs: [how it works](.claude/skills/upstream-cherry-pick/CONTEXT.md), [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
+
+---
+
+
+## [archive-session](.claude/skills/archive-session/SKILL.md) Skill (+ Optional Hook)
+
+Claude Code stores session transcripts in its hidden directory, but that's not meant to persist long-term. This skill saves your process history so you can inspect it later:
+
+- **Track chain of thought**: See exactly how Claude reasoned through problems and arrived at solutions
+
+- **Inspect subagent behavior**: When you spin up agents, see what context they received from the parent session, every step they took, and what they returned.
+
+- **Use valuable context later**: Keep easily searchable Markdown for your next debugging and planning session
+
+Export formats:
+
+- **Markdown**: Clean text for feeding back into Claude, and for context-friendly agentic and manual search in your IDE
+- **HTML**: Rich browser view with all tool calls, thinking, and command results with User/Assistant/Agent search filtering
+- **JSON**: Full session exactly as Claude Code captured it
+
+### Installation
+
+```bash
+cp -r .claude/skills/archive-session /path/to/your/project/.claude/skills/
+```
+
+**Dependencies:** The amazing [claude-code-log](https://github.com/daaain/claude-code-log) does the heavy lifting. The Skill falls back to `uvx claude-code-log@latest` if Python not installed.
+
+
+### Usage
+
+Invoke with `/archive-session` or ask Claude to run it in your chat. Output path is configurable: archive to a project folder, an Obsidian vault, or any knowledge management system or absolute/network path.
+
+Full docs: [SKILL.md](.claude/skills/archive-session/SKILL.md)
+
+### Super bonus combo: [PreCompact hook](.claude/hooks/README.md)
+
+If you run Claude Code with auto-compact, this Hook will use the Skill for auto-archiving on context compaction. 
+
+**How it works:**
+
+1. Claude Code detects context is full, initiates compact
+2. `PreCompact` hook fires, receives session ID via stdin
+3. Hook calls `archive.sh` with that session ID, the same scripts the Skill uses
+4. Full transcript + subagent logs archived to `docs/process/claudeCodeSessions/exported-on-<timestamp/`
+5. Claude Code compact exxecutes, leaving you with a fresh session context window 
+
+Read the [hook setup docs](.claude/hooks/README.md).
