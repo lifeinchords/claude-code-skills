@@ -4,6 +4,7 @@
 set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+PROJECT_DIR="${PROJECT_DIR%/}"  # Strip trailing slash
 
 # Archive destination - configurable via env var or argument
 # Can be overridden with CLAUDE_ARCHIVE_DIR env var or --output=<path> argument
@@ -11,7 +12,31 @@ DEFAULT_ARCHIVE_BASE="${PROJECT_DIR}/docs/process/claudeCodeSessions"
 ARCHIVE_BASE="${CLAUDE_ARCHIVE_DIR:-${DEFAULT_ARCHIVE_BASE}}"
 
 # Claude Code stores transcripts in ~/.claude/projects/<project-hash>/
-PROJECT_HASH=$(echo "${PROJECT_DIR}" | sed 's|/|-|g')
+# The hash is the project's native OS path with path separators and : replaced by -.
+#
+# Cross-platform issue: on Windows, MSYS/Git Bash pwd returns /d/code/project
+# but Claude Code hashes the Windows-native path D:\code\project, producing
+# D--code-project (: -> - and \ -> -). We must convert the MSYS path back to
+# Windows-native format before hashing.
+#
+# See llamacpp/tools/scripts/bash-vars.just for the canonical cross-platform
+# path strategy (pure string ops, no cygpath dependency).
+compute_project_hash() {
+    local dir="$1"
+
+    # Detect MSYS/Git Bash path: /d/code/... where d is a drive letter
+    if [[ "$dir" =~ ^/([a-zA-Z])(/|$) ]]; then
+        local drive
+        drive=$(echo "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
+        dir="${drive}:${dir:2}"
+        # /d/code/project -> D:/code/project
+    fi
+
+    # Replace : and / with - (matches Claude Code's project hash)
+    echo "$dir" | sed 's|[:/\\]|-|g'
+}
+
+PROJECT_HASH=$(compute_project_hash "${PROJECT_DIR}")
 TRANSCRIPT_DIR="${HOME}/.claude/projects/${PROJECT_HASH}"
 
 # Accept session ID as first positional arg, or detect from most recent
@@ -49,7 +74,7 @@ resolve_session_ref() {
     # Get session at offset (1-indexed for sed, so offset+1)
     local line_num=$((offset + 1))
     local session_file
-    session_file=$(ls -t "${TRANSCRIPT_DIR}"/*.jsonl 2>/dev/null | sed -n "${line_num}p")
+    session_file=$(ls -t "${TRANSCRIPT_DIR}"/*.jsonl 2>/dev/null | sed -n "${line_num}p" || true)
 
     if [ -z "$session_file" ]; then
         echo "Error: No session found at offset ${offset}" >&2
@@ -73,26 +98,36 @@ if [ -n "${SESSION_ID}" ]; then
 fi
 
 # Security: Validate and normalize ARCHIVE_BASE path
-# Expand tilde
-ARCHIVE_BASE=$(eval echo "${ARCHIVE_BASE}")
 
-# Security: Ensure archive path is not a sensitive system directory (before path normalization)
-case "${ARCHIVE_BASE}" in
-    /etc | /etc/* | /bin | /bin/* | /sbin | /sbin/* | /usr/bin | /usr/bin/* | /usr/sbin | /usr/sbin/* | /System | /System/* | /private/etc | /private/etc/* | /private/var/root | /private/var/root/*)
-        echo "Error: Cannot archive to system directory: ${ARCHIVE_BASE}"
-        exit 1
-        ;;
-esac
+# Safe tilde expansion (no eval — eval allows arbitrary command injection)
+if [[ "${ARCHIVE_BASE}" == "~" ]]; then
+    ARCHIVE_BASE="${HOME}"
+elif [[ "${ARCHIVE_BASE}" == "~/"* ]]; then
+    ARCHIVE_BASE="${HOME}/${ARCHIVE_BASE#\~/}"
+fi
 
-# Normalize to absolute path
+# Normalize to absolute path (resolves symlinks and ..)
 ARCHIVE_BASE=$(cd "$(dirname "${ARCHIVE_BASE}")" 2>/dev/null && pwd)/$(basename "${ARCHIVE_BASE}") || {
     echo "Error: Invalid output path: ${ARCHIVE_BASE}"
     exit 1
 }
 
+# Security: Block sensitive system directories.
+# Checked AFTER normalization so symlinks and .. are already resolved.
+case "${ARCHIVE_BASE}" in
+    /etc | /etc/* | /bin | /bin/* | /sbin | /sbin/* | \
+    /usr/bin | /usr/bin/* | /usr/sbin | /usr/sbin/* | \
+    /System | /System/* | /private/etc | /private/etc/* | \
+    /private/var/root | /private/var/root/* | \
+    /c/[Ww]indows | /c/[Ww]indows/* | C:/[Ww]indows | C:/[Ww]indows/*)
+        echo "Error: Cannot archive to system directory: ${ARCHIVE_BASE}"
+        exit 1
+        ;;
+esac
+
 if [ -z "${SESSION_ID}" ]; then
     # Find most recently modified .jsonl file = current session
-    LATEST_TRANSCRIPT=$(ls -t "${TRANSCRIPT_DIR}"/*.jsonl 2>/dev/null | head -1)
+    LATEST_TRANSCRIPT=$(ls -t "${TRANSCRIPT_DIR}"/*.jsonl 2>/dev/null | head -1 || true)
     if [ -n "${LATEST_TRANSCRIPT}" ]; then
         SESSION_ID=$(basename "${LATEST_TRANSCRIPT}" .jsonl)
 
@@ -137,7 +172,7 @@ if [ -d "${SUBAGENTS_DIR}" ]; then
     SUBAGENT_COUNT=$(find "${SUBAGENTS_DIR}" -name "agent-*.jsonl" 2>/dev/null | wc -l | tr -d ' ')
     if [ "${SUBAGENT_COUNT}" -gt 0 ]; then
         echo "Archiving ${SUBAGENT_COUNT} subagent transcripts..."
-        cp -r "${SUBAGENTS_DIR}" "${SESSION_ARCHIVE}/subagents"
+        cp -rL "${SUBAGENTS_DIR}" "${SESSION_ARCHIVE}/subagents"
     fi
 fi
 
@@ -146,23 +181,25 @@ generate_report() {
     local source="$1"
     local label="$2"
     local format="$3"
+    local format_upper
+    format_upper=$(echo "$format" | tr '[:lower:]' '[:upper:]')  # portable (bash 3.2/macOS)
     local open_flag=""
 
     # Only open browser for HTML, not for MD
     [ "$format" = "html" ] && open_flag="--open-browser"
 
     if command -v claude-code-log &>/dev/null; then
-        echo "Generating ${label} ${format^^} report..."
+        echo "Generating ${label} ${format_upper} report..."
         claude-code-log "${source}" -f "${format}" ${open_flag} 2>/dev/null || {
-            echo "Warning: ${label} ${format^^} report generation failed"
+            echo "Warning: ${label} ${format_upper} report generation failed"
         }
     elif command -v uvx &>/dev/null; then
-        echo "Generating ${label} ${format^^} report via uvx..."
+        echo "Generating ${label} ${format_upper} report via uvx..."
         uvx claude-code-log@latest "${source}" -f "${format}" ${open_flag} 2>/dev/null || {
-            echo "Warning: ${label} ${format^^} report generation failed"
+            echo "Warning: ${label} ${format_upper} report generation failed"
         }
     else
-        echo "Warning: claude-code-log not available, skipping ${label} ${format^^} report"
+        echo "Warning: claude-code-log not available, skipping ${label} ${format_upper} report"
     fi
 }
 

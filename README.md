@@ -5,6 +5,8 @@ Reusable skills for AI-assisted workflow automation and process engineering. Bui
 
 ## [upstream-cherry-pick](.claude/skills/upstream-cherry-pick/SKILL.md) Skill
 
+> **Note:** Only tested on macOS.
+
 Say you work on many projects, all started from a project template. You have your AI rules, skills, agents, and docs tuned to your tools, stack and IDE's. As you iterate, you find yourself improving workflows in the child projects.
 
 This skill helps you extract those commits back to your template repo. It:
@@ -32,6 +34,8 @@ Full docs: [how it works](.claude/skills/upstream-cherry-pick/CONTEXT.md), [exam
 
 ## [archive-session](.claude/skills/archive-session/SKILL.md) Skill (+ Optional Hook)
 
+**Note:** Works on both **macOS** and **Windows** (Git Bash / MSYS2).
+
 Claude Code stores session transcripts in its hidden directory, but that's not meant to persist long-term. This skill saves your process history so you can inspect it later:
 
 - **Track chain of thought**: See exactly how Claude reasoned through problems and arrived at solutions
@@ -48,8 +52,14 @@ Export formats:
 
 ### Installation
 
+**macOS / Linux:**
 ```bash
 cp -r .claude/skills/archive-session /path/to/your/project/.claude/skills/
+```
+
+**Windows (Git Bash / PowerShell):**
+```bash
+cp -r .claude/skills/archive-session D:/path/to/your/project/.claude/skills/
 ```
 
 **Dependencies:** The amazing [claude-code-log](https://github.com/daaain/claude-code-log) does the heavy lifting. The Skill falls back to `uvx claude-code-log@latest` if Python not installed.
@@ -59,18 +69,36 @@ cp -r .claude/skills/archive-session /path/to/your/project/.claude/skills/
 
 Invoke with `/archive-session` or ask Claude to run it in your chat. Output path is configurable: archive to a project folder, an Obsidian vault, or any knowledge management system or absolute/network path.
 
+**macOS example output:**
+```
+docs/process/claudeCodeSessions/exported-on-2026-02-09_10-30-00/
+├── session.html
+├── session.md
+├── session.jsonl
+└── session-info.txt
+```
+
+**Windows example output:**
+```
+D:\code\my-project\docs\process\claudeCodeSessions\exported-on-2026-02-09_10-30-00\
+├── session.html
+├── session.md
+├── session.jsonl
+└── session-info.txt
+```
+
 Full docs: [SKILL.md](.claude/skills/archive-session/SKILL.md)
 
 ### Super bonus combo: [PreCompact hook](.claude/hooks/README.md)
 
-If you run Claude Code with auto-compact, this Hook will use the Skill for auto-archiving on context compaction. 
+If you run Claude Code with auto-compact, this Hook will use the Skill for auto-archiving on context compaction.
 
 **How it works:**
 
 1. Claude Code detects context is full, initiates compact
 2. `PreCompact` hook fires, receives session ID via stdin
 3. Hook calls `archive.sh` with that session ID, the same scripts the Skill uses
-4. Full transcript + subagent logs archived to `docs/process/claudeCodeSessions/exported-on-<timestamp/`
-5. Claude Code compact exxecutes, leaving you with a fresh session context window 
+4. Full transcript + subagent logs archived to `docs/process/claudeCodeSessions/exported-on-<timestamp>/`
+5. Claude Code compact executes, leaving you with a fresh session context window
 
 Read the [hook setup docs](.claude/hooks/README.md).

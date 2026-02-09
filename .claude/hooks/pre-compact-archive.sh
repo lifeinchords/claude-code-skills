@@ -33,8 +33,7 @@ fi
 echo "[pre-compact-archive] Archiving session before compact: $SESSION_ID"
 
 # Pass session ID and any additional args to archive script
-# shellcheck disable=SC2068
-bash "$ARCHIVE_SCRIPT" "$SESSION_ID" $@
+bash "$ARCHIVE_SCRIPT" "$SESSION_ID" "$@"
 
 echo "[pre-compact-archive] Archive complete"
 exit 0

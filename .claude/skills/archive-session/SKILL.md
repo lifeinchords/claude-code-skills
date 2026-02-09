@@ -30,6 +30,29 @@ Archives the current Claude Code session transcript and any subagent logs, gener
 4. Generates HTML and Markdown files via `claude-code-log` dependency, or uvx
 5. Opens HTML in browser
 
+## Cross-Platform Support
+
+Works on both **macOS** and **Windows** (Git Bash / MSYS2). The script handles the different path formats each OS uses for Claude Code's transcript storage.
+
+Claude Code stores transcripts in `~/.claude/projects/<project-hash>/`, where `<project-hash>` is the project path with path separators and `:` replaced by `-`.
+
+**macOS:**
+```
+Project path:    /Users/dev/code/my-project
+Transcript dir:  ~/.claude/projects/-Users-dev-code-my-project/
+```
+
+**Windows (Git Bash / MSYS2):**
+```
+Native path:     D:\code\my-project
+Git Bash pwd:    /d/code/my-project
+Transcript dir:  ~/.claude/projects/D--code-my-project/
+```
+
+On Windows, the script detects the MSYS `/d/...` path format and converts it back to the Windows-native `D:/...` form before computing the hash. This uses pure string operations (no `cygpath` dependency).
+
+All bash features used are compatible with macOS's default bash 3.2.
+
 ## Output Location
 
 **Default:** `docs/process/claudeCodeSessions/exported-on-<timestamp>/`
