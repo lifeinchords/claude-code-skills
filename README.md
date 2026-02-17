@@ -63,7 +63,7 @@ Run `/permissions` in a session to inspect active rules.
 
 #### Full docs
 
-- [how it works](.claude/skills/upstream-cherry-pick/CONTEXT.md)
+- [how it works](.claude/skills/upstream-cherry-pick/references/CONTEXT.md)
 - [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
 
 ---

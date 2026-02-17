@@ -1,3 +1,6 @@
+> **Not for agents.** This is a human-facing reference doc. Do not load
+> into agent context unless the operator specifically asks for it.
+
 # Context
 
 ## Why?

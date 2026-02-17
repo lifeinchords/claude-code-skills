@@ -300,7 +300,7 @@ B: Squash (combine into single clean commit)
 
 Note: Selected commits are non-sequential (#1, #4, #7). Both modes apply
 commits individually, so conflicts may need resolution per commit.
-See CONTEXT.md "Squash limitations" for details.
+See [Squash limitations](references/CONTEXT.md#squash-limitations) for details.
 
 Which mode?
 ```
@@ -351,7 +351,7 @@ If operator asks to fix a MAYBE commit before cherry-picking:
     - If `<first-sha>` is the repository root commit (no parent), `<first-sha>^` fails. Use explicit SHAs instead.
 - **If Mode = Squash (locally)**:
   - Cherry-pick all commits: `git cherry-pick <sha1> <sha2> <sha3> ...`
-  - **Note:** Non-sequential commits may require conflict resolution per commit (see CONTEXT.md "Squash limitations")
+  - **Note:** Non-sequential commits may require conflict resolution per commit, if necessary see [Squash limitations](references/CONTEXT.md#squash-limitations)
   - Squash into single commit: `git reset --soft HEAD~<N>` where N = number of commits applied
   - Stage and commit with source reference: `git add . && git commit -m "<Claude drafts descriptive message>
 
