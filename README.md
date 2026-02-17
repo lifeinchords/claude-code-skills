@@ -25,9 +25,46 @@ cp -r .claude/skills/upstream-cherry-pick /path/to/your/project/.claude/skills/
 
 ### Usage
 
-Restart Claude Code, and invoke with `/upstream-cherry-pick` or by asking it to run it in your chat session
+#### Permissions: Allowing autorun
 
-Full docs: [how it works](.claude/skills/upstream-cherry-pick/CONTEXT.md), [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
+Each skill declares its required tools in YAML frontmatter (`SKILL.md`). That tells Claude Code which tools the skill *can request*. But Claude Code still checks your permission settings before executing them (and that's a good thing). 
+
+Without a matching `allow` entry, you get prompted every time a script runs. Add the entries below to `permissions.allow` in either:
+
+- **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
+
+- **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
+
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)",
+      "Skill(upstream-cherry-pick)"
+    ]
+  }
+}
+```
+
+<br>
+
+###### Verifying
+
+Restart Claude Code and invoke the skill with `/upstream-cherry-pick` or by asking it to run it in your chat session. 
+
+Scripts should run without prompts. If you still get prompted, check for typos in path patterns, they must exactly match the command Claude generates. 
+
+Run `/permissions` in a session to inspect active rules.
+
+#### Full docs
+
+- [how it works](.claude/skills/upstream-cherry-pick/CONTEXT.md)
+- [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
 
 ---
 
@@ -87,7 +124,37 @@ D:\code\my-project\docs\process\claudeCodeSessions\exported-on-2026-02-09_10-30-
 └── session-info.txt
 ```
 
-Full docs: [SKILL.md](.claude/skills/archive-session/SKILL.md)
+### Permissions: Allowing autorun
+
+- **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
+
+- **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
+
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)",
+      "Skill(archive-session)"
+    ]
+  }
+}
+```
+
+<br>
+
+###### Verifying
+
+Restart Claude Code and invoke the skill with `/archive-session` or by asking it to run it in your chat session. 
+
+Scripts should run without prompts. If you still get prompted, check for typos in path patterns, they must exactly match the command Claude generates. 
+
+Run `/permissions` in a session to inspect active rules.
+
+### Full docs
+
+[SKILL.md](.claude/skills/archive-session/SKILL.md)
 
 ### Super bonus combo: [PreCompact hook](.claude/hooks/README.md)
 
@@ -102,3 +169,7 @@ If you run Claude Code with auto-compact, this Hook will use the Skill for auto-
 5. Claude Code compact executes, leaving you with a fresh session context window
 
 Read the [hook setup docs](.claude/hooks/README.md).
+
+---
+
+
