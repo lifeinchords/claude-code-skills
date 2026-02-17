@@ -6,6 +6,8 @@ allowed-tools:
   - Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)
 ---
 
+**IMPORTANT: Always invoke scripts with relative paths from the project root, never absolute paths. Permission rules use relative patterns -- absolute paths will not match and will trigger a prompt.**
+
 # Archive Session
 
 Archives the current Claude Code session transcript and any subagent logs, generating browsable HTML and Markdown files.

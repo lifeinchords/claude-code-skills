@@ -9,11 +9,11 @@ allowed-tools:
   - Read
   - Grep
   - Glob
-  - Bash(./.claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)
-  - Bash(./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)
-  - Bash(./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)
-  - Bash(./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)
-  - Bash(./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)
+  - Bash(bash .claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)
+  - Bash(bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)
+  - Bash(bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)
+  - Bash(bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)
+  - Bash(bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)
   - Bash(git status:*)
   - Bash(git log:*)
   - Bash(git diff:*)
@@ -28,6 +28,8 @@ allowed-tools:
   - Bash(git rev-parse:*)
   - Bash(git ls-files:*)
 ---
+
+**IMPORTANT: Always invoke scripts with relative paths from the project root, never absolute paths. Permission rules use relative patterns -- absolute paths will not match and will trigger a prompt.**
 
 ## Purpose
 
@@ -57,7 +59,7 @@ This skill includes executable scripts in `.claude/skills/upstream-cherry-pick/s
 
 **check-deps.sh** - Verifies required tools are installed
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/check-deps.sh
+bash .claude/skills/upstream-cherry-pick/scripts/check-deps.sh
 # Returns JSON with status: ok, missing, declined, or error
 
 # Exit codes: 
@@ -73,7 +75,7 @@ Notes:
 
 **preflight-check.sh** - Validates template repo state before cherry-picking without mutating repo state (no fetch/pull).
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
+bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 # Returns JSON with status: clean, dirty, wrong_branch, or behind
 
 # Exit codes: 
@@ -88,7 +90,7 @@ Note: `preflight-check.sh` is intentionally **non-mutating**. It does **not** ru
 
 **list-commits.sh** - Deterministically list commits (sha/message/files) for Claude to classify (NO classification inside the script).
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh <remote/branch> [count]
+bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh <remote/branch> [count]
 # Returns JSON array with: sha, message, files[]
 # NO classification - Claude inspects diffs and applies EXAMPLES.md guidance
 
@@ -102,7 +104,7 @@ Notes:
 
 **conflict-backup.sh** - Detects conflicts (from cherry-pick OR git apply --3way), creates backups, returns structured JSON. Rejects suspicious paths, skips symlinks, records checksums.
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh [commit-sha] [commit-message]
+bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh [commit-sha] [commit-message]
 # Returns JSON with: conflict_source (merge|patch), files, line numbers, types, backup location
 
 # Exit codes:
@@ -114,7 +116,7 @@ Notes:
 
 **detect-mode.sh** - Suggests cherry-pick vs squash based on commit patterns
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh <remote/branch> [count]
+bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh <remote/branch> [count]
 # Returns JSON with: suggested_mode, reason, common_prefix, files[]
 # If all commits share a path prefix → suggests squash
 # If commits touch scattered paths → suggests cherry-pick
@@ -208,7 +210,7 @@ When uncertain, classify as MAYBE and present with an "Offer:" explaining what n
 Run the preflight script to validate template repo state:
 
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
+bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh <template-repo-path>
 ```
 
 If output indicates any non-clean state, stop and ask operator how to proceed.
@@ -237,12 +239,12 @@ git fetch tmp-project
 
 **2a. List commits:**
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/list-commits.sh tmp-project/<branch> <N>
+bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh tmp-project/<branch> <N>
 ```
 
 **2b. Detect suggested mode:**
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/detect-mode.sh tmp-project/<branch> <N>
+bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh tmp-project/<branch> <N>
 ```
 
 If `suggested_mode` is `squash` (all commits share a path prefix), present mode choice to operator.
@@ -368,7 +370,7 @@ If cherry-pick reports conflicts, STOP immediately.
 Run the conflict backup script to detect, backup, and analyze conflicts:
 
 ```bash
-./.claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh <commit-sha> "<commit-message>"
+bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh <commit-sha> "<commit-message>"
 ```
 
 The script returns JSON with:

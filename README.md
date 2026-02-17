@@ -27,9 +27,13 @@ cp -r .claude/skills/upstream-cherry-pick /path/to/your/project/.claude/skills/
 
 #### Permissions: Allowing autorun
 
-Each skill declares its required tools in YAML frontmatter (`SKILL.md`). That tells Claude Code which tools the skill *can request*. But Claude Code still checks your permission settings before executing them (and that's a good thing). 
+Each skill declares its required tools in YAML frontmatter (`SKILL.md`). That tells Claude Code which tools the skill *can request*. But Claude Code still checks your permission settings before executing them (and that's a good thing).
 
-Without a matching `allow` entry, you get prompted every time a script runs. Add the entries below to `permissions.allow` in either:
+Without a matching `allow` entry, you get prompted every time a script runs.
+
+**Why `bash` prefix matters:** Claude Code permission matching is literal prefix matching against the command string the agent generates. When the agent runs `bash .claude/skills/.../script.sh`, the allow rule must start with `Bash(bash .claude/skills/...` to match. If the rule used `Bash(.claude/skills/...` (no `bash`), or the agent used an absolute path like `bash /Users/you/project/.claude/skills/...`, the pattern won't match and you get prompted. The `bash` prefix, the relative path, and the `:*` wildcard suffix must all align between the SKILL.md `allowed-tools`, the `settings.json` allow rules, and the actual command the agent generates.
+
+Add the entries below to `permissions.allow` in either:
 
 - **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
 
@@ -55,9 +59,13 @@ Without a matching `allow` entry, you get prompted every time a script runs. Add
 
 ###### Verifying
 
-Restart Claude Code and invoke the skill with `/upstream-cherry-pick` or by asking it to run it in your chat session. 
+Restart Claude Code and invoke the skill with `/upstream-cherry-pick` or by asking it to run it in your chat session.
 
-Scripts should run without prompts. If you still get prompted, check for typos in path patterns, they must exactly match the command Claude generates. 
+Scripts should run without prompts. If you still get prompted, check that:
+
+- Path patterns have no typos -- they must exactly match the command Claude generates
+
+- Scripts are invoked with **relative paths** (e.g. `bash .claude/skills/...`), not absolute paths. Permission matching is literal, so `bash /Users/you/...` will not match a `bash .claude/...` allow rule.
 
 Run `/permissions` in a session to inspect active rules.
 
@@ -146,9 +154,13 @@ D:\code\my-project\docs\process\claudeCodeSessions\exported-on-2026-02-09_10-30-
 
 ###### Verifying
 
-Restart Claude Code and invoke the skill with `/archive-session` or by asking it to run it in your chat session. 
+Restart Claude Code and invoke the skill with `/archive-session` or by asking it to run it in your chat session.
 
-Scripts should run without prompts. If you still get prompted, check for typos in path patterns, they must exactly match the command Claude generates. 
+Scripts should run without prompts. If you still get prompted, check that:
+
+- Path patterns have no typos -- they must exactly match the command Claude generates
+
+- Scripts are invoked with **relative paths** (e.g. `bash .claude/skills/...`), not absolute paths. Permission matching is literal, so `bash /Users/you/...` will not match a `bash .claude/...` allow rule.
 
 Run `/permissions` in a session to inspect active rules.
 
