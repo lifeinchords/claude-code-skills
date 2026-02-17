@@ -54,4 +54,17 @@ Claude Code supports hooks for many events beyond PreCompact. See the official [
 
 ## Dependencies
 
-This repo's `archive-session` Skill
+- This repo's `archive-session` Skill
+  (`.claude/skills/archive-session/scripts/archive.sh`)
+
+- `jq` — parses JSON hook input from CC stdin. Install:
+  - macOS: `brew install jq`
+  - Windows: `winget install jqlang.jq`
+
+- `claude-code-log` or `uvx` — generates HTML/Markdown reports.
+  Script checks for `claude-code-log` first, falls back to
+  `uvx claude-code-log@latest`. If neither available, transcripts
+  are archived but report generation is skipped.
+
+- `cygpath` — used by `archive.sh` to normalize Windows paths.
+  Ships with Git for Windows (MSYS). No install needed on macOS.
