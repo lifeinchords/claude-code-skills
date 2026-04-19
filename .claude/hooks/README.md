@@ -22,7 +22,7 @@ You can also set it up globally, look up how on the CC docs.
 
 ### Configure
 
-Add this block to your project's  `.claude/settings.local.json`  file:
+Add this block to your project's `.claude/settings.json` file (or merge with any existing `hooks` block). A combined example with both the `permissions` allow rules and this `hooks` block lives at [`.claude/settings.json.example`](../settings.json.example) at the repo root.
 
 ```json
 {
