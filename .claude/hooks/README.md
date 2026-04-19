@@ -24,6 +24,8 @@ You can also set it up globally, look up how on the CC docs.
 
 Add this block to your project's `.claude/settings.json` file (or merge with any existing `hooks` block). A combined example with both the `permissions` allow rules and this `hooks` block lives at [`.claude/settings.json.example`](../settings.json.example) at the repo root.
 
+`${CLAUDE_PROJECT_DIR}` in the `command` string is an environment variable that Claude Code sets automatically when it invokes a hook. It resolves to the root of the project where `.claude/` lives, so you do not need to hard-code an absolute path. See the [official Claude Code hooks docs](https://docs.claude.com/en/docs/claude-code/hooks) and the [hook-development skill](https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/hook-development/SKILL.md) in the `anthropics/claude-code` repo for the full list of hook env vars.
+
 ```json
 {
   "hooks": {
