@@ -107,6 +107,8 @@ elif [[ "${ARCHIVE_BASE}" == "~/"* ]]; then
 fi
 
 # Normalize to absolute path (resolves symlinks and ..)
+# Create parent dirs first. cd fails if they don't exist yet, producing a bad path.
+mkdir -p "$(dirname "${ARCHIVE_BASE}")" 2>/dev/null || true
 ARCHIVE_BASE=$(cd "$(dirname "${ARCHIVE_BASE}")" 2>/dev/null && pwd)/$(basename "${ARCHIVE_BASE}") || {
     echo "Error: Invalid output path: ${ARCHIVE_BASE}"
     exit 1
