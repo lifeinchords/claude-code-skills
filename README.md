@@ -2,79 +2,11 @@
 
 Reusable skills for AI-assisted workflow automation and process engineering. Built while experimenting with Claude Code, Cursor, and MCP servers.
 
+## Skills in this repo
 
-## [upstream-cherry-pick](.claude/skills/upstream-cherry-pick/SKILL.md) Skill
-
-> **Note:** Only tested on macOS.
-
-Say you work on many projects, all started from a project template. You have your AI rules, skills, agents, and docs tuned to your tools, stack and IDE's. As you iterate, you find yourself improving workflows in the child projects.
-
-This skill helps you extract those commits back to your template repo. It:
-
-- intelligently analyzes recent commits by content
-- classifies them as YES/NO/MAYBE for reusability
-- gives you a detailed analysis, with the key files changed in each commit you don't need to switch to git history view for investigation
-- interactively guides you through the cherry-picking process, safely taking care of the complex git steps. It prioritizes **safety** so changes in both the child (project) and parent (template) are respected/saved
-
-
-### Installation
-
-```bash
-cp -r .claude/skills/upstream-cherry-pick /path/to/your/project/.claude/skills/
-```
-
-### Usage
-
-#### Permissions: Allowing autorun
-
-Each skill declares its required tools in YAML frontmatter (`SKILL.md`). That tells Claude Code which tools the skill *can request*. But Claude Code still checks your permission settings before executing them (and that's a good thing).
-
-Without a matching `allow` entry, you get prompted every time a script runs.
-
-**Why `bash` prefix matters:** Claude Code permission matching is literal prefix matching against the command string the agent generates. When the agent runs `bash .claude/skills/.../script.sh`, the allow rule must start with `Bash(bash .claude/skills/...` to match. If the rule used `Bash(.claude/skills/...` (no `bash`), or the agent used an absolute path like `bash /Users/you/project/.claude/skills/...`, the pattern won't match and you get prompted. The `bash` prefix, the relative path, and the `:*` wildcard suffix must all align between the SKILL.md `allowed-tools`, the `settings.json` allow rules, and the actual command the agent generates.
-
-Add the entries below to `permissions.allow` in either:
-
-- **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
-
-- **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
-
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)",
-      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)",
-      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)",
-      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)",
-      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)",
-      "Skill(upstream-cherry-pick)"
-    ]
-  }
-}
-```
-
-<br>
-
-###### Verifying
-
-Restart Claude Code and invoke the skill with `/upstream-cherry-pick` or by asking it to run it in your chat session.
-
-Scripts should run without prompts. If you still get prompted, check that:
-
-- Path patterns have no typos -- they must exactly match the command Claude generates
-
-- Scripts are invoked with **relative paths** (e.g. `bash .claude/skills/...`), not absolute paths. Permission matching is literal, so `bash /Users/you/...` will not match a `bash .claude/...` allow rule.
-
-Run `/permissions` in a session to inspect active rules.
-
-#### Full docs
-
-- [how it works](.claude/skills/upstream-cherry-pick/references/CONTEXT.md)
-- [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
-
----
+- **[archive-session](#archive-session-skill--slash-command--optional-hook)** — Archive transcripts + subagent logs to HTML/Markdown/JSONL. Skill, `/archive-session` slash command, and optional PreCompact hook.
+- **[dep-recon](#dep-recon-skill)** — Probe a dependency's GitHub repo to verify whether a symbol, flag, or feature actually exists, before falling back to Context7 or web search.
+- **[upstream-cherry-pick](#upstream-cherry-pick-skill)** — Extract reusable commits from a project back to a template repo, with YES/MAYBE/NO classification and interactive cherry-pick or squash.
 
 
 ## [archive-session](.claude/skills/archive-session/SKILL.md): Skill + Slash Command + Optional Hook
@@ -144,32 +76,7 @@ D:\code\my-project\docs\process\claudeCodeSessions\exported-on-2026-02-09_10-30-
 
 - **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
 
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)",
-      "Skill(archive-session)"
-    ]
-  },
-  "hooks": {
-    "PreCompact": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-compact-archive.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-The `hooks` block is only required if you want the [PreCompact auto-archive](#super-bonus-combo-precompact-hook). If you just want the `/archive-session` slash command, keep only the `permissions` block.
+The `hooks` block is only useful if you want the [PreCompact auto-archive](#super-bonus-combo-precompact-hook). If you just want the `/archive-session` slash command, keep only the `permissions` block.
 
 A ready-to-copy version of both blocks lives at [`.claude/settings.json.example`](.claude/settings.json.example). Copy what you need into your own `.claude/settings.json` (or merge with any existing allow rules and hooks already there).
 
@@ -206,7 +113,6 @@ If you run Claude Code with auto-compact, this Hook will use the Skill for auto-
 Read the [hook setup docs](.claude/hooks/README.md).
 
 ---
-
 
 ## [dep-recon](.claude/skills/dep-recon/SKILL.md) Skill
 
@@ -288,7 +194,75 @@ Run `/permissions` in a session to inspect active rules.
 - Claude's internals truncate results at 100KB, and the tool-result budget downstream is 50KB with a 2KB preview if exceeded (see [Mikhail Shilkov, "Inside Claude Code's Web Tools"](https://mikhail.io/2025/10/claude-code-web-tools/)).
 - [r/ClaudeAI Deep Dive: I dug and dug and finally found out how the Context7 MCP works under-the-hood](https://www.reddit.com/r/ClaudeAI/comments/1muoes4/deep_dive_i_dug_and_dug_and_finally_found_out_how/).
 
-
 ---
 
+## [upstream-cherry-pick](.claude/skills/upstream-cherry-pick/SKILL.md) Skill
 
+> **Note:** Only tested on macOS.
+
+Say you work on many projects, all started from a project template. You have your AI rules, skills, agents, and docs tuned to your tools, stack and IDE's. As you iterate, you find yourself improving workflows in the child projects.
+
+This skill helps you extract those commits back to your template repo. It:
+
+- intelligently analyzes recent commits by content
+- classifies them as YES/NO/MAYBE for reusability
+- gives you a detailed analysis, with the key files changed in each commit you don't need to switch to git history view for investigation
+- interactively guides you through the cherry-picking process, safely taking care of the complex git steps. It prioritizes **safety** so changes in both the child (project) and parent (template) are respected/saved
+
+
+### Installation
+
+```bash
+cp -r .claude/skills/upstream-cherry-pick /path/to/your/project/.claude/skills/
+```
+
+### Usage
+
+#### Permissions: Allowing autorun
+
+Each skill declares its required tools in YAML frontmatter (`SKILL.md`). That tells Claude Code which tools the skill *can request*. But Claude Code still checks your permission settings before executing them (and that's a good thing).
+
+Without a matching `allow` entry, you get prompted every time a script runs.
+
+**Why `bash` prefix matters:** Claude Code permission matching is literal prefix matching against the command string the agent generates. When the agent runs `bash .claude/skills/.../script.sh`, the allow rule must start with `Bash(bash .claude/skills/...` to match. If the rule used `Bash(.claude/skills/...` (no `bash`), or the agent used an absolute path like `bash /Users/you/project/.claude/skills/...`, the pattern won't match and you get prompted. The `bash` prefix, the relative path, and the `:*` wildcard suffix must all align between the SKILL.md `allowed-tools`, the `settings.json` allow rules, and the actual command the agent generates.
+
+Add the entries below to `permissions.allow` in either:
+
+- **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
+
+- **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
+
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/check-deps.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/conflict-backup.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/detect-mode.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/list-commits.sh:*)",
+      "Bash(bash .claude/skills/upstream-cherry-pick/scripts/preflight-check.sh:*)",
+      "Skill(upstream-cherry-pick)"
+    ]
+  }
+}
+```
+
+<br>
+
+###### Verifying
+
+Restart Claude Code and invoke the skill with `/upstream-cherry-pick` or by asking it to run it in your chat session.
+
+Scripts should run without prompts. If you still get prompted, check that:
+
+- Path patterns have no typos -- they must exactly match the command Claude generates
+
+- Scripts are invoked with **relative paths** (e.g. `bash .claude/skills/...`), not absolute paths. Permission matching is literal, so `bash /Users/you/...` will not match a `bash .claude/...` allow rule.
+
+Run `/permissions` in a session to inspect active rules.
+
+#### Full docs
+
+- [how it works](.claude/skills/upstream-cherry-pick/references/CONTEXT.md)
+- [examples](.claude/skills/upstream-cherry-pick/EXAMPLES.md) 
