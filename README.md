@@ -240,7 +240,7 @@ cp -r .claude/skills/dep-recon D:/path/to/your/project/.claude/skills/
 **Dependencies:**
 
 - **Required:** GitHub CLI (`gh`) authenticated via `gh auth login`.
-- **Optional:** [Context7 plugin](https://claude.com/plugins/context7). If installed, dep-recon queries Context7 as one of the fallback sources after GitHub search comes up empty. If not installed, dep-recon skips the Context7 step and falls back to web search only. See the [Claude Code plugins docs](https://docs.claude.com/en/docs/claude-code/plugins) for how to install a plugin.
+- **Optional:** [Context7 plugin](https://claude.com/plugins/context7). If installed, dep-recon queries Context7 as one of the fallback sources after GitHub search comes up empty. If not installed, dep-recon skips the Context7 step and falls back to web search only. See the [Claude Code plugins docs](https://code.claude.com/docs/en/discover-plugins#install-plugins) for how to install a plugin.
 
 ### Usage
 
