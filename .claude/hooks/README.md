@@ -50,10 +50,6 @@ Default: `<project-root>/docs/process/claudeCodeSessions/exported-on-<timestamp>
 
 Override by exporting `CLAUDE_ARCHIVE_DIR` in your shell profile, or edit the hook script to pass `--output=<path>` to `archive.sh`.
 
-## Other hook events
-
-Claude Code supports hooks for many events beyond PreCompact. See the official [Claude Code Hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) docs for all possibilities.
-
 ## Dependencies
 
 - This repo's `archive-session` Skill
