@@ -185,3 +185,84 @@ Read the [hook setup docs](.claude/hooks/README.md).
 ---
 
 
+## [dep-recon](.claude/skills/dep-recon/SKILL.md) Skill
+
+> **Note:** Works on both **macOS** and **Windows** (Git Bash / MSYS2). Requires `gh` CLI authenticated.
+
+When you ask Claude "does flag X exist in tool Y?" or "what version added feature Z?", the agent usually reaches for WebFetch or Context7. Both silently truncate. WebFetch converts HTML to Markdown via Turndown, then caps the result at 100KB.
+
+Context7 chunks documentation and returns partial results that look complete.
+
+Neither tool tells the agent "your answer was cut off" and neither guarantees the symbol you searched for was in the chunk that came back.
+
+`dep-recon` flips the default. Instead of starting with a summary layer, it probes the dependency's actual source on GitHub first:
+
+- **Ground truth before speculation**: local clone Grep (if available) → `gh search code` in the official repo → only then falls back to Context7 / WebFetch with explicit corroboration required
+- **Treats empty results as signal, not conclusion**: runs unqualified, then qualified (`path:*.md`, `language:<lang>`), then term variants (snake_case, camelCase, kebab-case) before concluding a symbol is absent
+- **Answers the right question shapes**: "does X exist", "what version added X", "was X removed", "how does Y handle X", "is there a way to X in Y"
+- **Surfaces the source**: reports which file, which line, which release, which issue, so you can verify yourself
+
+### Installation
+
+**macOS / Linux:**
+```bash
+cp -r .claude/skills/dep-recon /path/to/your/project/.claude/skills/
+```
+
+**Windows (Git Bash / PowerShell):**
+```bash
+cp -r .claude/skills/dep-recon D:/path/to/your/project/.claude/skills/
+```
+
+**Dependencies:** GitHub CLI (`gh`) authenticated via `gh auth login`. No other install step.
+
+### Usage
+
+Invoke with `/dep-recon <term> <owner/repo>` or ask Claude to run it when you're about to make an existence claim about a library. Example: `/dep-recon skip_output evilmartians/lefthook`.
+
+### Permissions: Allowing autorun
+
+- **Project-level** (recommended): `.claude/settings.json` in your project root. Checked into git, shared with collaborators.
+
+- **Global-level**: `~/.claude/settings.json`. Applies to all projects. Useful if you install these skills everywhere.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh search code:*)",
+      "Bash(gh search issues:*)",
+      "Bash(gh search prs:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh api:*)",
+      "Skill(dep-recon)"
+    ]
+  }
+}
+```
+
+<br>
+
+###### Verifying
+
+Restart Claude Code and invoke with `/dep-recon <term> <owner/repo>`. Scripts should run without prompts. If you still get prompted, check that:
+
+- Path patterns have no typos -- they must exactly match the command Claude generates
+
+- `gh auth status` reports authenticated. Unauthenticated `gh search` will prompt or fail silently.
+
+Run `/permissions` in a session to inspect active rules.
+
+### Full docs
+
+[SKILL.md](.claude/skills/dep-recon/SKILL.md) covers the three-phase flow (local Grep → `gh search` → fallback), the truncation-as-signal rule, and the confidence gradient that decides when Context7 + WebFetch are trustworthy as corroboration vs primary sources.
+
+### References
+
+- Claude's internals truncate results at 100KB, and the tool-result budget downstream is 50KB with a 2KB preview if exceeded (see [Mikhail Shilkov, "Inside Claude Code's Web Tools"](https://mikhail.io/2025/10/claude-code-web-tools/)).
+ 
+
+---
+
+
