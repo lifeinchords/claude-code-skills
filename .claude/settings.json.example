@@ -8,7 +8,6 @@
       "Bash(gh search prs:*)",
       "Bash(gh release list:*)",
       "Bash(gh release view:*)",
-      "Bash(gh api:*)",
       "Skill(dep-recon)"
     ]
   },

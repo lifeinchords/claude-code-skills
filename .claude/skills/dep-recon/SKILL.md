@@ -9,7 +9,6 @@ allowed-tools:
   - Bash(gh search prs:*)
   - Bash(gh release list:*)
   - Bash(gh release view:*)
-  - Bash(gh api:*)
   - Bash(ls:*)
   - Grep
   - Glob

@@ -23,7 +23,6 @@ allowed-tools:
   - Bash(git branch --show-current:*)
   - Bash(git show-ref:*)
   - Bash(git rev-list:*)
-  - Bash(git remote:*)
   - Bash(git remote -v:*)
   - Bash(git rev-parse:*)
   - Bash(git ls-files:*)

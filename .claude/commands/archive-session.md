@@ -1,7 +1,7 @@
 ---
 description: Archive current session transcript and subagent logs with HTML report
 argument-hint: "[session-ref] [--output=path]"
-allowed-tools: Bash
+allowed-tools: Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)
 ---
 
 Archive session transcript and subagent logs. Auto-detects current session, or pass session reference.

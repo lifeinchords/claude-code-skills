@@ -261,7 +261,6 @@ Invoke with `/dep-recon <term> <owner/repo>` or ask Claude to run it when you're
       "Bash(gh search prs:*)",
       "Bash(gh release list:*)",
       "Bash(gh release view:*)",
-      "Bash(gh api:*)",
       "Skill(dep-recon)"
     ]
   }
