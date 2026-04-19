@@ -1,6 +1,6 @@
 ---
 name: dep-recon
-description: Probe a dependency's GitHub repo to verify whether a symbol, flag, option, config key, feature, or behavior actually exists. Use BEFORE context7 or web searc: repo is ground truth. Triggers on questions like "does X exist in Y", "is there a way to X in Y", "what version added X", "was X removed from Y", "how does Y handle X", or any existence/capability claim about an api/lib/tool/dep.
+description: Probe a dependency's GitHub repo to verify whether a symbol, flag, option, config key, feature, or behavior actually exists. Use BEFORE context7 or web search. Repo is ground truth. Triggers on questions like "does X exist in Y", "is there a way to X in Y", "what version added X", "was X removed from Y", "how does Y handle X", or any existence/capability claim about an api/lib/tool/dep.
 user-invocable: true
 argument-hint: "<term> <owner/repo>"
 allowed-tools:
