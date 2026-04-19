@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)",
+      "Skill(archive-session)"
+    ]
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-compact-archive.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -77,9 +77,15 @@ Run `/permissions` in a session to inspect active rules.
 ---
 
 
-## [archive-session](.claude/skills/archive-session/SKILL.md) Skill (+ Optional Hook)
+## [archive-session](.claude/skills/archive-session/SKILL.md): Skill + Slash Command + Optional Hook
 
 **Note:** Works on both **macOS** and **Windows** (Git Bash / MSYS2).
+
+This extension ships three ways to trigger an archive:
+
+- **Skill** (`/archive-session` via the Claude Code skill system). Invoke mid-chat when you want to capture the current session.
+- **Slash command** (`.claude/commands/archive-session.md`). Same `/archive-session` trigger, works on installs where the skill system does not auto-register user-invocable skills as commands.
+- **Optional PreCompact hook** (`.claude/hooks/pre-compact-archive.sh`). Fires automatically right before Claude Code compacts context, so nothing is lost. See the [bonus combo section](#super-bonus-combo-precompact-hook) below.
 
 Claude Code stores session transcripts in its hidden directory, but that's not meant to persist long-term. This skill saves your process history so you can inspect it later:
 
@@ -146,9 +152,26 @@ D:\code\my-project\docs\process\claudeCodeSessions\exported-on-2026-02-09_10-30-
       "Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)",
       "Skill(archive-session)"
     ]
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-compact-archive.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+The `hooks` block is only required if you want the [PreCompact auto-archive](#super-bonus-combo-precompact-hook). If you just want the `/archive-session` slash command, keep only the `permissions` block.
+
+A ready-to-copy version of both blocks lives at [`.claude/settings.json.example`](.claude/settings.json.example). Copy what you need into your own `.claude/settings.json` (or merge with any existing allow rules and hooks already there).
 
 <br>
 
