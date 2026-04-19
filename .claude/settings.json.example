@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(bash .claude/skills/archive-session/scripts/archive.sh:*)",
-      "Skill(archive-session)"
+      "Skill(archive-session)",
+      "Bash(gh search code:*)",
+      "Bash(gh search issues:*)",
+      "Bash(gh search prs:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh api:*)",
+      "Skill(dep-recon)"
     ]
   },
   "hooks": {
@@ -17,5 +24,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "context7-plugin@context7-marketplace": true
   }
 }

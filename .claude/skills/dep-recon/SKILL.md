@@ -90,47 +90,59 @@ flowchart TD
     D0 -->|yes| A0["ANSWER: exists + cite local-path:line"]
     D0 -->|no or n/a| P1
 
-    subgraph Phase1["Phase A: Code: latest snapshot"]
+    subgraph Phase1["Phase A: Code, latest snapshot"]
       P1["gh search code '<term> repo:o/r'"]
       P1 --> P1a["gh search code '<term> repo:o/r path:*.md'"]
       P1a --> P1b["gh search code '<term> repo:o/r language:<lang>'"]
-      P1b --> P1c["Try term variants: snake_case, camelCase, kebab-case"]
+      P1b --> P1d["gh search code '<term> repo:o/r path:packages/<sub>/' for monorepos"]
+      P1d --> P1c["Try term variants: snake_case, camelCase, kebab-case"]
     end
 
     P1c --> D1{"Found in code?"}
     D1 -->|yes| A1["ANSWER: exists + cite file:line"]
-    D1 -->|no| P2
+    D1 -->|"no, empty result"| T1{"Tried all qualifiers<br/>and variants?"}
+    T1 -->|no| P1a
+    T1 -->|yes| P2
 
-    subgraph Phase2["Phase B: Issues + PRs: intent, gaps, workarounds"]
+    subgraph Phase2["Phase B: Issues + PRs, intent + gaps + workarounds"]
       P2["gh search issues '<term> repo:o/r'"]
       P2 --> P2a["gh search prs '<term> repo:o/r'"]
       P2a --> P2b["Check open + closed + merged"]
     end
 
     P2b --> D2{"Found discussion?"}
-    D2 -->|"exists, was removed"| A2["ANSWER: removed: cite issue/PR + version"]
-    D2 -->|"requested, not shipped"| A3["ANSWER: not supported: cite open issue"]
-    D2 -->|"in-flight PR"| A4["ANSWER: coming: cite PR + target version"]
-    D2 -->|nothing| P3
+    D2 -->|"requested, not shipped"| A3["ANSWER: not supported, cite open issue"]
+    D2 -->|"in-flight PR"| A4["ANSWER: coming, cite PR + target version"]
+    D2 -->|"merged PR or removal, need version"| P3
+    D2 -->|"nothing"| P3
 
-    subgraph Phase3["Phase C: Releases: when landed or removed"]
+    subgraph Phase3["Phase C: Releases, when landed or removed"]
       P3["gh release list --repo o/r --limit 20"]
       P3 --> P3a["gh release view <tag> --repo o/r for suspects"]
       P3a --> P3b["grep release notes for term"]
     end
 
     P3b --> D3{"Found in release notes?"}
-    D3 -->|yes| A5["ANSWER: added/removed in <version>"]
-    D3 -->|no| F["Fallback: context7 → web search"]
+    D3 -->|"yes, added"| A5["ANSWER: added in <version>"]
+    D3 -->|"yes, removed"| A2["ANSWER: removed in <version>, cite issue/PR"]
+    D3 -->|"no"| G{"Context7 plugin installed?"}
 
-    F --> A6["ANSWER with citation from C7 or web"]
+    G -->|yes| F1["context7 query-docs with natural-language question"]
+    G -->|no| F2["Web search: blogs, Stack Overflow, niche commentary"]
+    F1 --> F2
+
+    F2 --> D4{"Found in C7 or web?"}
+    D4 -->|yes| A6["ANSWER with citation from C7 or web"]
+    D4 -->|no| A7["ANSWER: I don't know, couldn't confirm"]
 
     classDef phase fill:#1f3a5f,stroke:#4a7aaf,color:#fff
     classDef decision fill:#5f3a1f,stroke:#af7a4a,color:#fff
     classDef answer fill:#1f5f3a,stroke:#4aaf7a,color:#fff
-    class Phase1,Phase2,Phase3 phase
-    class D1,D2,D3 decision
-    class A1,A2,A3,A4,A5,A6 answer
+    classDef optional stroke-dasharray: 5 5
+    class Phase0,Phase1,Phase2,Phase3 phase
+    class D0,D1,D2,D3,D4,T1,G decision
+    class A0,A1,A2,A3,A4,A5,A6,A7 answer
+    class F1 optional
 ```
 
 ## Phase A: Code (latest snapshot)
@@ -202,11 +214,13 @@ Then grep `temp/dep-recon-notes.md` for the term.
 
 Only after all three phases return clean empties with qualifiers tried:
 
-  A: context7 via MCP: `query-docs` with natural-language question
+  A: context7 via MCP, if the plugin is installed: `query-docs` with natural-language question
   B: Web search for niche commentary, blog posts, Stack Overflow
   C: If still nothing, tell the operator "I don't know, couldn't confirm"
 
-**C7 alone is NEVER enough.** C7 truncates unpredictably: a C7 "miss" could mean the fact was simply cut from the returned chunk, not absent from the docs. If C7 returns nothing useful or something that looks incomplete, ALWAYS corroborate with at least one of: (a) a second GH search pass with new term variants, (b) a direct WebFetch of the relevant docs page, (c) a web search. Never conclude from C7 in isolation.
+**Context7 is an optional dependency.** If the context7 plugin is not installed in this environment, skip step A and go straight to web search. The skill still works; you just lose one corroboration channel. Install at https://claude.com/plugins/context7.
+
+**C7 alone is NEVER enough.** C7 truncates unpredictably: a C7 "miss" could mean the fact was simply cut from the returned chunk, not absent from the docs. If C7 returns nothing useful or something that looks incomplete, ALWAYS corroborate with at least one of: a second GH search pass with new term variants, a direct WebFetch of the relevant docs page, or a web search. Never conclude from C7 in isolation.
 
 ## Output format
 

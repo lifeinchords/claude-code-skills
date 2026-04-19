@@ -237,7 +237,10 @@ cp -r .claude/skills/dep-recon /path/to/your/project/.claude/skills/
 cp -r .claude/skills/dep-recon D:/path/to/your/project/.claude/skills/
 ```
 
-**Dependencies:** GitHub CLI (`gh`) authenticated via `gh auth login`. No other install step.
+**Dependencies:**
+
+- **Required:** GitHub CLI (`gh`) authenticated via `gh auth login`.
+- **Optional:** [Context7 plugin](https://claude.com/plugins/context7). If installed, dep-recon queries Context7 as one of the fallback sources after GitHub search comes up empty. If not installed, dep-recon skips the Context7 step and falls back to web search only. See the [Claude Code plugins docs](https://docs.claude.com/en/docs/claude-code/plugins) for how to install a plugin.
 
 ### Usage
 
@@ -284,7 +287,8 @@ Run `/permissions` in a session to inspect active rules.
 ### References
 
 - Claude's internals truncate results at 100KB, and the tool-result budget downstream is 50KB with a 2KB preview if exceeded (see [Mikhail Shilkov, "Inside Claude Code's Web Tools"](https://mikhail.io/2025/10/claude-code-web-tools/)).
- 
+- [r/ClaudeAI Deep Dive: I dug and dug and finally found out how the Context7 MCP works under-the-hood](https://www.reddit.com/r/ClaudeAI/comments/1muoes4/deep_dive_i_dug_and_dug_and_finally_found_out_how/).
+
 
 ---
 
